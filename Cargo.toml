@@ -1,0 +1,14 @@
+[package]
+name = "ferrite"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.98"
+clap = "4.5.37"
+colored = "3.0.0"
+config = "0.15.11"
+libium = { path = "./ferium/libium/", package = "libium" }
+serde = { version = "1.0.219", features = ["derive"] }
+tokio = {version = "1.44.2", features = ["full"]}
+toml = "0.8.20"
