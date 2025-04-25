@@ -49,10 +49,9 @@ impl FerriteConfig {
     }
 
     pub fn write_config(&self) -> Result<()> {
-        //let serialized = serde_yaml::to_string(self)?;
-        let serialized = toml::to_string_pretty(self)?;
+        let serialized = serde_yaml::to_string(self)?;
 
-        let mut file = fs::File::create("ferrite.toml")?;
+        let mut file = fs::File::create("ferrite.yaml")?;
         file.write_all(serialized.as_bytes())?;
 
         Ok(())
@@ -96,7 +95,7 @@ async fn main() -> Result<()> {
             display_successes_failures(&successes, failures);
 
             if config.autoupdate {
-                upgrade(&profile).await?;
+                upgrade(&profile, false).await?;
             }
 
             config.update_mods(profile.mods);
@@ -153,7 +152,7 @@ async fn main() -> Result<()> {
             remove(&mut profile, mod_names)?;
 
             if config.autoupdate {
-                upgrade(&profile).await?;
+                upgrade(&profile, false).await?;
             }
 
             config.update_mods(profile.mods);
@@ -162,7 +161,7 @@ async fn main() -> Result<()> {
             let config = load_config()?;
             let profile = Profile::from(config.clone());
 
-            upgrade(&profile).await?;
+            upgrade(&profile, true).await?;
         }
 
         SubCommands::Init {
