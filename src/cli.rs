@@ -11,10 +11,10 @@ pub struct Ferrite {
 pub enum SubCommands {
     Init {
         #[clap(long, short = 'v')]
-        game_version: Vec<String>,
+        game_versions: Option<Vec<String>>,
 
         #[clap(long, short)]
-        mod_loaders: Vec<ModLoader>,
+        mod_loaders: Option<Vec<ModLoader>>,
     },
 
     Add {
