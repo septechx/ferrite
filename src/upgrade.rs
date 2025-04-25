@@ -22,7 +22,10 @@ use tokio::task::JoinSet;
 ///
 /// If an error occurs with a resolving task, instead of failing immediately,
 /// resolution will continue and the error return flag is set to true.
-pub async fn get_platform_downloadables(profile: &Profile) -> Result<(Vec<DownloadData>, bool)> {
+pub async fn get_platform_downloadables(
+    profile: &Profile,
+    user: bool,
+) -> Result<(Vec<DownloadData>, bool)> {
     let style = ProgressStyle::default_bar()
         .template("{spinner} {elapsed} [{wide_bar:.cyan/blue}] {pos:.cyan}/{len:.blue}")
         .expect("Progress bar template parse failure")
@@ -36,7 +39,9 @@ pub async fn get_platform_downloadables(profile: &Profile) -> Result<(Vec<Downlo
     // because I cannot drop the main thread's sender due to the recursion
     let mod_sender = Arc::new(mod_sender);
 
-    println!("{}\n", "Determining the Latest Compatible Versions".bold());
+    if user {
+        println!("{}\n", "Determining the Latest Compatible Versions".bold());
+    }
     progress_bar
         .lock()
         .enable_steady_tick(Duration::from_millis(100));
@@ -147,8 +152,8 @@ pub async fn get_platform_downloadables(profile: &Profile) -> Result<(Vec<Downlo
     Ok((to_download, error))
 }
 
-pub async fn upgrade(profile: &Profile) -> Result<()> {
-    let (mut to_download, error) = get_platform_downloadables(profile).await?;
+pub async fn upgrade(profile: &Profile, user: bool) -> Result<()> {
+    let (mut to_download, error) = get_platform_downloadables(profile, user).await?;
     let mut to_install = Vec::new();
     if profile.output_dir.join("user").exists()
         && profile.filters.mod_loader() != Some(&ModLoader::Quilt)
