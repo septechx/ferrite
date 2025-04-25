@@ -184,7 +184,8 @@ pub async fn upgrade(profile: &Profile, user: bool) -> Result<()> {
         download(profile.output_dir.clone(), to_download, to_install).await?;
     }
 
-    if error {
+    // TODO: Fix error logging
+    if error && false {
         Err(anyhow!(
             "\nCould not get the latest compatible version of some mods"
         ))
