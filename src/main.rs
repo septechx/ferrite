@@ -10,7 +10,8 @@ use anyhow::Result;
 use clap::Parser;
 use cli::{Ferrite, SubCommands};
 use colored::Colorize;
-use config::{Config, ConfigError, File};
+use config::{Config, File};
+use dotenvy::dotenv;
 use libium::{
     config::{
         filters::ProfileParameters,
@@ -20,13 +21,20 @@ use libium::{
 };
 use remove::remove;
 use serde::{Deserialize, Serialize};
-use std::{env, fs, io::Write};
+use std::{env, fs, io::Write, process::Command};
 use upgrade::upgrade;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct FerriteConfig {
     autoupdate: bool,
+    key_store: KeyStoreConfig,
     ferium: FeriumConfig,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
+enum KeyStoreConfig {
+    Pass,
+    DotEnv,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -40,6 +48,7 @@ impl FerriteConfig {
     pub fn new(game_versions: Vec<String>, mod_loaders: Vec<ModLoader>) -> Self {
         Self {
             autoupdate: true,
+            key_store: KeyStoreConfig::DotEnv,
             ferium: FeriumConfig {
                 mod_loaders,
                 game_versions,
@@ -52,6 +61,7 @@ impl FerriteConfig {
         let serialized = serde_yaml::to_string(self)?;
 
         let mut file = fs::File::create("ferrite.yaml")?;
+        file.write_all("# key_store: Pass / DotEnv".as_bytes())?;
         file.write_all(serialized.as_bytes())?;
 
         Ok(())
@@ -176,10 +186,46 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn load_config() -> Result<FerriteConfig, ConfigError> {
-    let config = Config::builder()
+fn load_config() -> Result<FerriteConfig> {
+    let serialized = Config::builder()
         .add_source(File::with_name("ferrite").required(true))
         .build()?;
 
-    config.try_deserialize()
+    let config: FerriteConfig = serialized.try_deserialize()?;
+
+    match config.key_store {
+        KeyStoreConfig::DotEnv => {
+            if !fs::exists(".env")? {
+                let mut file = fs::File::create(".env")?;
+                file.write_all("# GITHUB_TOKEN / CURSEFORGE_API_KEY".as_bytes())?;
+            };
+
+            dotenv().ok();
+        }
+        KeyStoreConfig::Pass => {
+            let gh_token = Command::new("pass")
+                .arg("ferrite/github_token")
+                .output()
+                .expect("failed to run pass")
+                .stdout;
+
+            let token_str = String::from_utf8_lossy(&gh_token).trim().to_string();
+            unsafe {
+                env::set_var("GITHUB_TOKEN", token_str);
+            }
+
+            let cf_api_key = Command::new("pass")
+                .arg("ferrite/curseforge_api_key")
+                .output()
+                .expect("failed to run pass")
+                .stdout;
+
+            let key_str = String::from_utf8_lossy(&cf_api_key).trim().to_string();
+            unsafe {
+                env::set_var("CURSEFORGE_API_KEY", key_str);
+            }
+        }
+    }
+
+    Ok(config)
 }
