@@ -20,7 +20,7 @@ use libium::{
 };
 use remove::remove;
 use serde::{Deserialize, Serialize};
-use std::{env, fs};
+use std::{env, fs, io::Write};
 use upgrade::upgrade;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -32,26 +32,28 @@ struct FerriteConfig {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct FeriumConfig {
     mods: Vec<Mod>,
-    game_version: Vec<String>,
+    game_versions: Vec<String>,
     mod_loaders: Vec<ModLoader>,
 }
 
 impl FerriteConfig {
-    pub fn new(game_version: Vec<String>, mod_loaders: Vec<ModLoader>) -> Self {
+    pub fn new(game_versions: Vec<String>, mod_loaders: Vec<ModLoader>) -> Self {
         Self {
             autoupdate: true,
             ferium: FeriumConfig {
-                game_version,
                 mod_loaders,
+                game_versions,
                 mods: vec![],
             },
         }
     }
 
-    pub fn write_config(&self) -> Result<(), std::io::Error> {
-        let toml_str =
-            toml::to_string_pretty(self).expect("Failed to serialize FerriteConfig to TOML");
-        fs::write("ferrite.toml", toml_str)?;
+    pub fn write_config(&self) -> Result<()> {
+        //let serialized = serde_yaml::to_string(self)?;
+        let serialized = toml::to_string_pretty(self)?;
+
+        let mut file = fs::File::create("ferrite.toml")?;
+        file.write_all(serialized.as_bytes())?;
 
         Ok(())
     }
@@ -71,7 +73,7 @@ impl From<FerriteConfig> for Profile {
             env::current_dir()
                 .expect("Failed to get current directory")
                 .join("mods"),
-            config.ferium.game_version,
+            config.ferium.game_versions,
             config.ferium.mod_loaders,
             config.ferium.mods,
         )
@@ -150,6 +152,10 @@ async fn main() -> Result<()> {
 
             remove(&mut profile, mod_names)?;
 
+            if config.autoupdate {
+                upgrade(&profile).await?;
+            }
+
             config.update_mods(profile.mods);
         }
         SubCommands::Upgrade => {
@@ -160,11 +166,11 @@ async fn main() -> Result<()> {
         }
 
         SubCommands::Init {
-            game_version,
+            game_versions,
             mod_loaders,
         } => {
-            let config = init::create(Some(game_version), Some(mod_loaders)).await?;
-            let serialized = toml::to_string_pretty(&config)?;
+            let config = init::create(game_versions, mod_loaders).await?;
+            config.write_config()?;
         }
     }
 

@@ -58,11 +58,11 @@ pub async fn pick_minecraft_versions() -> Result<Vec<String>> {
 }
 
 pub async fn create(
-    game_version: Option<Vec<String>>,
+    game_versions: Option<Vec<String>>,
     mod_loaders: Option<Vec<ModLoader>>,
 ) -> Result<FerriteConfig> {
-    Ok(match (game_version, mod_loaders) {
-        (Some(game_version), Some(mod_loaders)) => FerriteConfig::new(game_version, mod_loaders),
+    Ok(match (game_versions, mod_loaders) {
+        (Some(game_versions), Some(mod_loaders)) => FerriteConfig::new(game_versions, mod_loaders),
         (None, None) => FerriteConfig::new(pick_minecraft_versions().await?, pick_mod_loader()?),
         _ => {
             bail!("Provide the game versions and mod loaders to create a profile")
