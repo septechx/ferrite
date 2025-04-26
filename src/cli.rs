@@ -17,17 +17,22 @@ pub enum SubCommands {
         mod_loaders: Option<Vec<ModLoader>>,
     },
 
+    Start,
+
+    #[clap(visible_aliases = ["i", "install"])]
     Add {
         #[clap(required = true)]
         identifiers: Vec<String>,
     },
 
     #[clap(visible_alias = "rm")]
-    Remove { mod_names: Vec<String> },
+    Remove {
+        mod_names: Vec<String>,
+    },
 
     #[clap(visible_alias = "ls")]
     List,
 
-    #[clap(visible_aliases = ["update"])]
+    #[clap(visible_alias = "update")]
     Upgrade,
 }

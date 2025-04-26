@@ -1,6 +1,6 @@
 [package]
 name = "ferrite"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
@@ -14,9 +14,9 @@ indicatif = "0.17.11"
 inquire = "0.7.5"
 libium = { path = "./ferium/libium/", package = "libium" }
 parking_lot = "0.12.3"
-reqwest = "0.12.15"
+reqwest = { version = "0.12.15", features = ["json"] }
 serde = { version = "1.0.219", features = ["derive"] }
 size = "0.5.0"
-tokio = {version = "1.44.2", features = ["full"]}
-serde_yaml = "0.9"
+tokio = { version = "1.44.2", features = ["full"] }
 dotenvy = "0.15.7"
+serde_yml = "0.0.12"
