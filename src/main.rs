@@ -61,7 +61,7 @@ impl FerriteConfig {
         let serialized = serde_yaml::to_string(self)?;
 
         let mut file = fs::File::create("ferrite.yaml")?;
-        file.write_all("# key_store: Pass / DotEnv".as_bytes())?;
+        file.write_all("# key_store: Pass / DotEnv\n".as_bytes())?;
         file.write_all(serialized.as_bytes())?;
 
         Ok(())
