@@ -3,6 +3,7 @@ mod cli;
 mod download;
 mod init;
 mod remove;
+mod structs;
 mod upgrade;
 
 use add::display_successes_failures;
@@ -21,14 +22,25 @@ use libium::{
 };
 use remove::remove;
 use serde::{Deserialize, Serialize};
-use std::{env, fs, io::Write, process::Command};
+use std::{
+    env, fs,
+    io::Write,
+    process::{Command, Stdio},
+};
 use upgrade::upgrade;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct FerriteConfig {
     autoupdate: bool,
     key_store: KeyStoreConfig,
+    server: ServerConfig,
     ferium: FeriumConfig,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct ServerConfig {
+    wrapper: String,
+    executable: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -45,10 +57,19 @@ struct FeriumConfig {
 }
 
 impl FerriteConfig {
-    pub fn new(game_versions: Vec<String>, mod_loaders: Vec<ModLoader>) -> Self {
+    pub fn new(
+        game_versions: Vec<String>,
+        mod_loaders: Vec<ModLoader>,
+        wrapper: String,
+        executable: String,
+    ) -> Self {
         Self {
             autoupdate: true,
             key_store: KeyStoreConfig::DotEnv,
+            server: ServerConfig {
+                wrapper,
+                executable,
+            },
             ferium: FeriumConfig {
                 mod_loaders,
                 game_versions,
@@ -58,7 +79,7 @@ impl FerriteConfig {
     }
 
     pub fn write_config(&self) -> Result<()> {
-        let serialized = serde_yaml::to_string(self)?;
+        let serialized = serde_yml::to_string(self)?;
 
         let mut file = fs::File::create("ferrite.yaml")?;
         file.write_all("# key_store: Pass / DotEnv\n".as_bytes())?;
@@ -180,6 +201,24 @@ async fn main() -> Result<()> {
         } => {
             let config = init::create(game_versions, mod_loaders).await?;
             config.write_config()?;
+        }
+
+        SubCommands::Start => {
+            let config = load_config()?;
+
+            let wrapper = config
+                .server
+                .wrapper
+                .replace("{}", &config.server.executable);
+            let parts = wrapper.split(' ').collect_vec();
+
+            Command::new(&parts[0])
+                .args(&parts[1..])
+                .stdin(Stdio::inherit())
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .spawn()?
+                .wait()?;
         }
     }
 
