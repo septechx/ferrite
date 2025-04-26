@@ -1,11 +1,15 @@
 # Set the default shell
 set shell := ["sh", "-cu"]
 
-build:
-    cargo build --release
-
 install:
     cargo install --path .
+
+build-full:
+    cargo build --release
+    cargo build --target x86_64-pc-windows-gnu --release
+
+build:
+    cargo build
 
 clean:
     cargo clean
