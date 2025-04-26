@@ -18,7 +18,7 @@ pub fn pick_mod_loader() -> Result<Vec<ModLoader>> {
 }
 
 pub async fn pick_minecraft_versions() -> Result<Vec<String>> {
-    let mut versions = Ferinth::default().list_game_versions().await?;
+    let mut versions = Ferinth::default().tag_list_game_versions().await?;
     versions.sort_by(|a, b| {
         // Sort by release type (release > snapshot > beta > alpha) then in reverse chronological order
         a.version_type
