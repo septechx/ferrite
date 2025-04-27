@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use libium::config::structs::ModLoader;
 
 #[derive(Clone, Debug, Parser)]
+#[clap(version)]
 pub struct Ferrite {
     #[clap(subcommand)]
     pub subcommand: SubCommands,
