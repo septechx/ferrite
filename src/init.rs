@@ -130,22 +130,27 @@ async fn fetch_forge_loader_version(game_version: &str) -> Result<String> {
 /// Downloads a server jar file
 async fn download_server_jar(url: &str) -> Result<String> {
     let jar = reqwest::get(url).await?;
-
-    let filename = jar
+    let content_disposition = jar
         .headers()
         .get(CONTENT_DISPOSITION)
-        .ok_or_else(|| anyhow::anyhow!("No Content-Disposition header found"))?
-        .to_str()?
-        .split(';')
-        .find_map(|part| part.trim().strip_prefix("filename="))
-        .ok_or_else(|| anyhow::anyhow!("No filename in Content-Disposition"))?
-        .trim_matches('"')
-        .to_string();
+        .and_then(|h| h.to_str().ok())
+        .map(String::from);
+
+    let bytes = jar.bytes().await?;
+
+    let filename = if let Some(content_disposition) = content_disposition {
+        content_disposition
+            .split(';')
+            .find_map(|part| part.trim().strip_prefix("filename="))
+            .ok_or_else(|| anyhow::anyhow!("No filename in Content-Disposition"))?
+            .trim_matches('"')
+            .to_string()
+    } else {
+        format!("server-{}.jar", blake3::hash(&bytes))
+    };
 
     let mut file = File::create(&filename)?;
-    let content = jar.bytes().await?;
-    file.write_all(&content)?;
-
+    file.write_all(&bytes)?;
     Ok(filename)
 }
 
@@ -245,6 +250,51 @@ pub async fn get_server_jar(
                     "./run.sh"
                 }),
                 String::from("{} nogui"),
+            )
+        }
+
+        ModLoader::Quilt => {
+            progress_bar.set_message(format!(
+                "Downloading Quilt server installer jar ({})",
+                game_version.green(),
+            ));
+
+            let url = "https://quiltmc.org/api/v1/download-latest-installer/java-universal";
+
+            let installer_filename = download_server_jar(&url).await?;
+
+            progress_bar.set_message(format!(
+                "✓ Succesfully downloaded server installer for {} ({})",
+                game_version.green(),
+                mod_loader.to_string().green(),
+            ));
+
+            progress_bar.set_message(format!(
+                "Installing Quilt server ({})",
+                game_version.green(),
+            ));
+
+            Command::new("java")
+                .arg("-jar")
+                .arg(&installer_filename)
+                .arg("install")
+                .arg("server")
+                .arg(game_version)
+                .arg("--download-server")
+                .arg("--install-dir=./")
+                .output()?;
+
+            fs::remove_file(&installer_filename)?;
+
+            progress_bar.finish_with_message(format!(
+                "✓ Succesfully downloaded server for {} ({})",
+                game_version.green(),
+                mod_loader.to_string().green(),
+            ));
+
+            (
+                String::from("quilt-server-launch.jar"),
+                String::from("java -jar {} nogui"),
             )
         }
 
