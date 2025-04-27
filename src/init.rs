@@ -1,4 +1,10 @@
-use std::{fs::File, io::Write, time::Duration};
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::Write,
+    process::Command,
+    time::Duration,
+};
 
 use anyhow::{Result, bail};
 use colored::Colorize;
@@ -102,6 +108,25 @@ async fn fetch_fabric_loader_version(game_version: &str) -> Result<String> {
         .ok_or_else(|| anyhow::anyhow!("No Fabric loader version found for {}", game_version))
 }
 
+/// Fetches the latest Forge loader version for a given Minecraft version
+async fn fetch_forge_loader_version(game_version: &str) -> Result<String> {
+    let versions = reqwest::get(
+        "https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.json",
+    )
+    .await?
+    .json::<HashMap<String, Vec<String>>>()
+    .await?;
+
+    let versions = versions
+        .get(game_version)
+        .ok_or_else(|| anyhow::anyhow!("No Forge loader version found for {}", game_version))?;
+
+    versions
+        .last()
+        .map(|v| v.clone())
+        .ok_or_else(|| anyhow::anyhow!("No Forge loader version found for {}", game_version))
+}
+
 /// Downloads a server jar file
 async fn download_server_jar(url: &str) -> Result<String> {
     let jar = reqwest::get(url).await?;
@@ -164,6 +189,65 @@ pub async fn get_server_jar(
 
             (filename, String::from("java -Xmx2G -jar {} nogui"))
         }
+
+        ModLoader::Forge => {
+            progress_bar.set_message(format!(
+                "Fetching Forge loader versions for {}",
+                game_version.green()
+            ));
+
+            let forge_version = fetch_forge_loader_version(game_version).await?;
+
+            progress_bar.set_message(format!(
+                "Downloading Forge server installer jar ({} / {})",
+                game_version.green(),
+                forge_version.green()
+            ));
+
+            let url = format!(
+                "https://maven.minecraftforge.net/net/minecraftforge/forge/{}/forge-{}-installer.jar",
+                forge_version, forge_version
+            );
+
+            let installer_filename = download_server_jar(&url).await?;
+
+            progress_bar.set_message(format!(
+                "✓ Succesfully downloaded server installer for {} ({})",
+                game_version.green(),
+                mod_loader.to_string().green(),
+            ));
+
+            progress_bar.set_message(format!(
+                "Installing Forge server ({} / {})",
+                game_version.green(),
+                forge_version.green()
+            ));
+
+            Command::new("java")
+                .arg("-jar")
+                .arg(&installer_filename)
+                .arg("--installServer")
+                .output()?;
+
+            fs::remove_file(&installer_filename)?;
+            fs::remove_file(format!("{}.log", &installer_filename))?;
+
+            progress_bar.finish_with_message(format!(
+                "✓ Succesfully downloaded server for {} ({})",
+                game_version.green(),
+                mod_loader.to_string().green(),
+            ));
+
+            (
+                String::from(if cfg!(windows) {
+                    "./run.bat"
+                } else {
+                    "./run.sh"
+                }),
+                String::from("{} nogui"),
+            )
+        }
+
         _ => {
             progress_bar.finish_with_message(format!(
                 "Mod loader {} is not implemented yet",
