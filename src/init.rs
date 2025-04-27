@@ -103,7 +103,7 @@ async fn fetch_fabric_loader_version(game_version: &str) -> Result<String> {
 }
 
 /// Downloads a server jar file
-async fn download_server_jar(url: &str, progress_bar: &ProgressBar) -> Result<String> {
+async fn download_server_jar(url: &str) -> Result<String> {
     let jar = reqwest::get(url).await?;
 
     let filename = jar
@@ -117,7 +117,6 @@ async fn download_server_jar(url: &str, progress_bar: &ProgressBar) -> Result<St
         .trim_matches('"')
         .to_string();
 
-    progress_bar.set_message(format!("Saving server jar to {}", filename));
     let mut file = File::create(&filename)?;
     let content = jar.bytes().await?;
     file.write_all(&content)?;
@@ -139,14 +138,15 @@ pub async fn get_server_jar(
         ModLoader::Fabric => {
             progress_bar.set_message(format!(
                 "Fetching Fabric loader versions for {}",
-                game_version
+                game_version.green()
             ));
 
             let fabric_version = fetch_fabric_loader_version(game_version).await?;
 
             progress_bar.set_message(format!(
                 "Downloading Fabric server jar ({} / {})",
-                game_version, fabric_version
+                game_version.green(),
+                fabric_version.green()
             ));
 
             let url = format!(
@@ -154,12 +154,12 @@ pub async fn get_server_jar(
                 game_version, fabric_version
             );
 
-            let filename = download_server_jar(&url, &progress_bar).await?;
+            let filename = download_server_jar(&url).await?;
 
             progress_bar.finish_with_message(format!(
-                "✓ {}: Downloaded {} successfully",
+                "✓ Succesfully downloaded server jar for {} ({})",
+                game_version.green(),
                 mod_loader.to_string().green(),
-                filename
             ));
 
             (filename, String::from("java -Xmx2G -jar {} nogui"))
