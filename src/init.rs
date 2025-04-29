@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Result, bail};
+use anyhow::{Ok, Result, bail};
 use colored::Colorize;
 use ferinth::{Ferinth, structures::tag::GameVersion};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -125,6 +125,32 @@ async fn fetch_forge_loader_version(game_version: &str) -> Result<String> {
         .last()
         .map(|v| v.clone())
         .ok_or_else(|| anyhow::anyhow!("No Forge loader version found for {}", game_version))
+}
+
+/// Fetches the latest NeoForge loader version for a given Minecraft version
+async fn fetch_neoforge_loader_version(game_version: &str) -> Result<String> {
+    let versions = reqwest::get(
+        "https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml",
+    )
+    .await?
+    .text()
+    .await?;
+
+    let versions: NeoForgeLoaderMetadata = serde_xml_rs::from_str(&versions)?;
+
+    let versions = versions
+        .versioning
+        .versions
+        .version
+        .iter()
+        .filter(|v| v.starts_with(game_version.strip_prefix("1.").unwrap()))
+        .collect_vec();
+
+    versions
+        .last()
+        .ok_or_else(|| anyhow::anyhow!("No NeoForge loader version found for {}", game_version))
+        .cloned()
+        .cloned()
 }
 
 /// Downloads a server jar file
@@ -295,6 +321,64 @@ pub async fn get_server_jar(
             (
                 String::from("quilt-server-launch.jar"),
                 String::from("java -jar {} nogui"),
+            )
+        }
+
+        ModLoader::NeoForge => {
+            progress_bar.set_message(format!(
+                "Fetching NeoForge loader versions for {}",
+                game_version.green()
+            ));
+
+            let neoforge_version = fetch_neoforge_loader_version(game_version).await?;
+
+            progress_bar.set_message(format!(
+                "Downloading NeoForge server installer jar ({} / {})",
+                game_version.green(),
+                neoforge_version.green(),
+            ));
+
+            let url = format!(
+                "https://maven.neoforged.net/releases/net/neoforged/neoforge/{}/neoforge-{}-installer.jar",
+                neoforge_version, neoforge_version
+            );
+
+            let installer_filename = download_server_jar(&url).await?;
+
+            progress_bar.set_message(format!(
+                "✓ Succesfully downloaded server installer for {} ({})",
+                game_version.green(),
+                mod_loader.to_string().green(),
+            ));
+
+            progress_bar.set_message(format!(
+                "Installing NeoForge server ({} / {})",
+                game_version.green(),
+                neoforge_version.green()
+            ));
+
+            Command::new("java")
+                .arg("-jar")
+                .arg(&installer_filename)
+                .arg("--installServer")
+                .output()?;
+
+            fs::remove_file(&installer_filename)?;
+            fs::remove_file(format!("{}.log", &installer_filename))?;
+
+            progress_bar.finish_with_message(format!(
+                "✓ Succesfully downloaded server for {} ({})",
+                game_version.green(),
+                mod_loader.to_string().green(),
+            ));
+
+            (
+                String::from(if cfg!(windows) {
+                    "./run.bat"
+                } else {
+                    "./run.sh"
+                }),
+                String::from("{} nogui"),
             )
         }
 
