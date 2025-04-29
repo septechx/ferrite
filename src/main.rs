@@ -3,6 +3,7 @@ mod cli;
 mod download;
 mod init;
 mod remove;
+mod server;
 mod structs;
 mod upgrade;
 

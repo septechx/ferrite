@@ -1,10 +1,4 @@
-use std::{
-    collections::HashMap,
-    fs::{self, File},
-    io::Write,
-    process::Command,
-    time::Duration,
-};
+use std::{collections::HashMap, fs::File, io::Write, time::Duration};
 
 use anyhow::{Ok, Result, bail};
 use colored::Colorize;
@@ -14,6 +8,7 @@ use inquire::MultiSelect;
 use libium::{config::structs::ModLoader, iter_ext::IterExt};
 use reqwest::header::CONTENT_DISPOSITION;
 
+use crate::server::ServerInstallation;
 use crate::{FerriteConfig, structs::*};
 
 /// Creates a progress bar with a spinner and message
@@ -180,220 +175,6 @@ async fn download_server_jar(url: &str) -> Result<String> {
     Ok(filename)
 }
 
-/// Gets the server jar for a specific game version and mod loader
-pub async fn get_server_jar(
-    game_version: &str,
-    mod_loader: &ModLoader,
-) -> Result<(String, String)> {
-    let progress_bar = create_progress_bar(&format!(
-        "Downloading server jar for {} ({})",
-        game_version, mod_loader
-    ));
-
-    let result = match mod_loader {
-        ModLoader::Fabric => {
-            progress_bar.set_message(format!(
-                "Fetching Fabric loader versions for {}",
-                game_version.green()
-            ));
-
-            let fabric_version = fetch_fabric_loader_version(game_version).await?;
-
-            progress_bar.set_message(format!(
-                "Downloading Fabric server jar ({} / {})",
-                game_version.green(),
-                fabric_version.green()
-            ));
-
-            let url = format!(
-                "https://meta.fabricmc.net/v2/versions/loader/{}/{}/1.0.3/server/jar",
-                game_version, fabric_version
-            );
-
-            let filename = download_server_jar(&url).await?;
-
-            progress_bar.finish_with_message(format!(
-                "✓ Succesfully downloaded server jar for {} ({})",
-                game_version.green(),
-                mod_loader.to_string().green(),
-            ));
-
-            (filename, String::from("java -Xmx2G -jar {} nogui"))
-        }
-
-        ModLoader::Forge => {
-            progress_bar.set_message(format!(
-                "Fetching Forge loader versions for {}",
-                game_version.green()
-            ));
-
-            let forge_version = fetch_forge_loader_version(game_version).await?;
-
-            progress_bar.set_message(format!(
-                "Downloading Forge server installer jar ({} / {})",
-                game_version.green(),
-                forge_version.green()
-            ));
-
-            let url = format!(
-                "https://maven.minecraftforge.net/net/minecraftforge/forge/{}/forge-{}-installer.jar",
-                forge_version, forge_version
-            );
-
-            let installer_filename = download_server_jar(&url).await?;
-
-            progress_bar.set_message(format!(
-                "✓ Succesfully downloaded server installer for {} ({})",
-                game_version.green(),
-                mod_loader.to_string().green(),
-            ));
-
-            progress_bar.set_message(format!(
-                "Installing Forge server ({} / {})",
-                game_version.green(),
-                forge_version.green()
-            ));
-
-            Command::new("java")
-                .arg("-jar")
-                .arg(&installer_filename)
-                .arg("--installServer")
-                .output()?;
-
-            fs::remove_file(&installer_filename)?;
-            fs::remove_file(format!("{}.log", &installer_filename))?;
-
-            progress_bar.finish_with_message(format!(
-                "✓ Succesfully downloaded server for {} ({})",
-                game_version.green(),
-                mod_loader.to_string().green(),
-            ));
-
-            (
-                String::from(if cfg!(windows) {
-                    "./run.bat"
-                } else {
-                    "./run.sh"
-                }),
-                String::from("{} nogui"),
-            )
-        }
-
-        ModLoader::Quilt => {
-            progress_bar.set_message(format!(
-                "Downloading Quilt server installer jar ({})",
-                game_version.green(),
-            ));
-
-            let url = "https://quiltmc.org/api/v1/download-latest-installer/java-universal";
-
-            let installer_filename = download_server_jar(&url).await?;
-
-            progress_bar.set_message(format!(
-                "✓ Succesfully downloaded server installer for {} ({})",
-                game_version.green(),
-                mod_loader.to_string().green(),
-            ));
-
-            progress_bar.set_message(format!(
-                "Installing Quilt server ({})",
-                game_version.green(),
-            ));
-
-            Command::new("java")
-                .arg("-jar")
-                .arg(&installer_filename)
-                .arg("install")
-                .arg("server")
-                .arg(game_version)
-                .arg("--download-server")
-                .arg("--install-dir=./")
-                .output()?;
-
-            fs::remove_file(&installer_filename)?;
-
-            progress_bar.finish_with_message(format!(
-                "✓ Succesfully downloaded server for {} ({})",
-                game_version.green(),
-                mod_loader.to_string().green(),
-            ));
-
-            (
-                String::from("quilt-server-launch.jar"),
-                String::from("java -jar {} nogui"),
-            )
-        }
-
-        ModLoader::NeoForge => {
-            progress_bar.set_message(format!(
-                "Fetching NeoForge loader versions for {}",
-                game_version.green()
-            ));
-
-            let neoforge_version = fetch_neoforge_loader_version(game_version).await?;
-
-            progress_bar.set_message(format!(
-                "Downloading NeoForge server installer jar ({} / {})",
-                game_version.green(),
-                neoforge_version.green(),
-            ));
-
-            let url = format!(
-                "https://maven.neoforged.net/releases/net/neoforged/neoforge/{}/neoforge-{}-installer.jar",
-                neoforge_version, neoforge_version
-            );
-
-            let installer_filename = download_server_jar(&url).await?;
-
-            progress_bar.set_message(format!(
-                "✓ Succesfully downloaded server installer for {} ({})",
-                game_version.green(),
-                mod_loader.to_string().green(),
-            ));
-
-            progress_bar.set_message(format!(
-                "Installing NeoForge server ({} / {})",
-                game_version.green(),
-                neoforge_version.green()
-            ));
-
-            Command::new("java")
-                .arg("-jar")
-                .arg(&installer_filename)
-                .arg("--installServer")
-                .output()?;
-
-            fs::remove_file(&installer_filename)?;
-            fs::remove_file(format!("{}.log", &installer_filename))?;
-
-            progress_bar.finish_with_message(format!(
-                "✓ Succesfully downloaded server for {} ({})",
-                game_version.green(),
-                mod_loader.to_string().green(),
-            ));
-
-            (
-                String::from(if cfg!(windows) {
-                    "./run.bat"
-                } else {
-                    "./run.sh"
-                }),
-                String::from("{} nogui"),
-            )
-        }
-
-        _ => {
-            progress_bar.finish_with_message(format!(
-                "Mod loader {} is not implemented yet",
-                mod_loader.to_string().red()
-            ));
-            todo!()
-        }
-    };
-
-    Ok(result)
-}
-
 /// Sorts mod loaders in a consistent order
 fn sort_mod_loaders(mod_loaders: &mut Vec<ModLoader>) {
     mod_loaders.sort_by_key(|loader| match loader {
@@ -412,7 +193,10 @@ pub async fn create(
     match (game_versions, mod_loaders) {
         (Some(game_versions), Some(mut mod_loaders)) => {
             sort_mod_loaders(&mut mod_loaders);
-            let (executable, wrapper) = get_server_jar(&game_versions[0], &mod_loaders[0]).await?;
+            let ServerInstallation {
+                executable,
+                wrapper,
+            } = crate::server::get_server_jar(&game_versions[0], &mod_loaders[0]).await?;
             Ok(FerriteConfig::new(
                 game_versions,
                 mod_loaders,
@@ -424,7 +208,10 @@ pub async fn create(
             let game_versions = pick_minecraft_versions().await?;
             let mut mod_loaders = pick_mod_loader()?;
             sort_mod_loaders(&mut mod_loaders);
-            let (executable, wrapper) = get_server_jar(&game_versions[0], &mod_loaders[0]).await?;
+            let ServerInstallation {
+                executable,
+                wrapper,
+            } = crate::server::get_server_jar(&game_versions[0], &mod_loaders[0]).await?;
             Ok(FerriteConfig::new(
                 game_versions,
                 mod_loaders,
