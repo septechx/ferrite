@@ -15,3 +15,14 @@ ferium:
         - String
         - String
       slug: String
+  disabled:
+    # Modrinth / Curseforge mod
+    - name: String
+      identifier: String
+      slug: String
+    # Github releases mod
+    - name: String
+      identifier:
+        - String
+        - String
+      slug: String

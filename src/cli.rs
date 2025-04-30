@@ -31,6 +31,14 @@ pub enum SubCommands {
         mod_names: Vec<String>,
     },
 
+    Disable {
+        mod_names: Vec<String>,
+    },
+
+    Enable {
+        mod_names: Vec<String>,
+    },
+
     #[clap(visible_alias = "ls")]
     List,
 

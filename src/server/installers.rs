@@ -1,7 +1,7 @@
 use anyhow::Result;
 use colored::Colorize;
 use indicatif::ProgressBar;
-use libium::iter_ext::{self, IterExt};
+use libium::iter_ext::IterExt;
 use std::{fs, process::Command};
 
 use super::{ServerInstallation, download_file_with_progress};
@@ -264,4 +264,3 @@ async fn fetch_neoforge_loader_version(game_version: &str) -> Result<String> {
         .cloned()
         .cloned()
 }
-
