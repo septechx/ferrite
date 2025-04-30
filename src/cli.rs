@@ -35,8 +35,8 @@ pub enum SubCommands {
         mod_names: Vec<String>,
     },
 
-    Enable {
-        mod_names: Vec<String>,
+    Override {
+        mod_override: Vec<String>,
     },
 
     #[clap(visible_alias = "ls")]

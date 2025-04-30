@@ -213,6 +213,28 @@ async fn main() -> Result<()> {
             upgrade(&profile, true, &config.ferium.overrides).await?;
         }
 
+        SubCommands::Override { mod_override } => {
+            let mut config = load_config()?;
+
+            anyhow::ensure!(mod_override.len() == 2, "Invalid amount of arguments");
+
+            let identifier: ModIdentifier = if mod_override[1].contains('/') {
+                let split = mod_override[1].split_once('/').unwrap();
+                ModIdentifier::GitHubRepository(split.0.to_string(), split.1.to_string())
+            } else if mod_override[1].chars().all(|c| c.is_ascii_digit()) {
+                ModIdentifier::CurseForgeProject(mod_override[1].parse::<i32>()?)
+            } else {
+                ModIdentifier::ModrinthProject(mod_override[1].clone())
+            };
+
+            config
+                .ferium
+                .overrides
+                .insert(mod_override[0].clone(), identifier);
+
+            config.write_config()?;
+        }
+
         SubCommands::Init {
             game_versions,
             mod_loaders,
