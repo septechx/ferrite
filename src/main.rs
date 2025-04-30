@@ -151,27 +151,14 @@ async fn main() -> Result<()> {
 
         SubCommands::List => {
             let config = load_config()?;
-            let profile = Profile::from(config.clone());
 
             println!(
-                "{} {} on {} {}\n",
-                profile.name.bold(),
-                format!("({} mods)", profile.mods.len()).yellow(),
-                profile
-                    .filters
-                    .mod_loader()
-                    .map(ToString::to_string)
-                    .unwrap_or_default()
-                    .purple(),
-                profile
-                    .filters
-                    .game_versions()
-                    .unwrap_or(&vec![])
-                    .iter()
-                    .display(", ")
-                    .green(),
+                "{} mods on {} {}\n",
+                config.ferium.mods.len().to_string().yellow(),
+                config.ferium.mod_loaders.iter().display(", ").purple(),
+                config.ferium.game_versions.iter().display(", ").green(),
             );
-            for mod_ in &profile.mods {
+            for mod_ in &config.ferium.mods {
                 println!(
                     "{:20}  {}",
                     match &mod_.identifier {
