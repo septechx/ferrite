@@ -1,5 +1,6 @@
 mod add;
 mod cli;
+mod disable;
 mod download;
 mod init;
 mod remove;
@@ -13,6 +14,7 @@ use clap::Parser;
 use cli::{Ferrite, SubCommands};
 use colored::Colorize;
 use config::{Config, File};
+use disable::disable;
 use dotenvy::dotenv;
 use libium::{
     config::{
@@ -52,9 +54,10 @@ enum KeyStoreConfig {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct FeriumConfig {
-    mods: Vec<Mod>,
     game_versions: Vec<String>,
     mod_loaders: Vec<ModLoader>,
+    mods: Vec<Mod>,
+    disabled: Vec<Mod>,
 }
 
 impl FerriteConfig {
@@ -75,6 +78,7 @@ impl FerriteConfig {
                 mod_loaders,
                 game_versions,
                 mods: vec![],
+                disabled: vec![],
             },
         }
     }
@@ -91,8 +95,9 @@ impl FerriteConfig {
         Ok(())
     }
 
-    pub fn update_mods(&mut self, mods: Vec<Mod>) {
-        self.ferium.mods = mods;
+    pub fn update(&mut self, profile: Profile) {
+        self.ferium.mods = profile.mods;
+        self.ferium.disabled = profile.disabled;
         if let Err(e) = self.write_config() {
             eprintln!("Error writing config: {}", e);
         }
@@ -101,7 +106,7 @@ impl FerriteConfig {
 
 impl From<FerriteConfig> for Profile {
     fn from(config: FerriteConfig) -> Self {
-        Self::new_with_mods(
+        Self::new_complete(
             String::from("ferrite"),
             env::current_dir()
                 .expect("Failed to get current directory")
@@ -109,6 +114,7 @@ impl From<FerriteConfig> for Profile {
             config.ferium.game_versions,
             config.ferium.mod_loaders,
             config.ferium.mods,
+            config.ferium.disabled,
         )
     }
 }
@@ -123,8 +129,16 @@ async fn main() -> Result<()> {
             let mut profile = Profile::from(config.clone());
 
             let identifiers: Vec<_> = identifiers.into_iter().map(libium::add::parse_id).collect();
+
             let (successes, failures) =
                 libium::add(&mut profile, identifiers, true, false, vec![]).await?;
+
+            profile.disabled.retain(|m| {
+                !profile
+                    .mods
+                    .iter()
+                    .any(|mod_| mod_.identifier == m.identifier)
+            });
 
             display_successes_failures(&successes, failures);
 
@@ -132,7 +146,7 @@ async fn main() -> Result<()> {
                 upgrade(&profile, false).await?;
             }
 
-            config.update_mods(profile.mods);
+            config.update(profile);
         }
 
         SubCommands::List => {
@@ -189,8 +203,22 @@ async fn main() -> Result<()> {
                 upgrade(&profile, false).await?;
             }
 
-            config.update_mods(profile.mods);
+            config.update(profile);
         }
+
+        SubCommands::Disable { mod_names } => {
+            let mut config = load_config()?;
+            let mut profile = Profile::from(config.clone());
+
+            disable(&mut profile, mod_names)?;
+
+            if config.autoupdate {
+                upgrade(&profile, false).await?;
+            }
+
+            config.update(profile);
+        }
+
         SubCommands::Upgrade => {
             let config = load_config()?;
             let profile = Profile::from(config.clone());
@@ -223,6 +251,8 @@ async fn main() -> Result<()> {
                 .spawn()?
                 .wait()?;
         }
+
+        _ => todo!(),
     }
 
     Ok(())

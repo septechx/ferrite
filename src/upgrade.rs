@@ -11,7 +11,7 @@ use libium::{
 };
 use parking_lot::Mutex;
 use std::{
-    fs::read_dir,
+    fs::{self, read_dir},
     mem::take,
     sync::{Arc, mpsc},
     time::Duration,
@@ -64,6 +64,8 @@ pub async fn get_platform_downloadables(
 
     // `initial` accounts for the edge case where at first,
     // no tasks have been spawned yet but there are messages in the channel
+    // TODO: Fix bug where if mods is empty initial will never be false and this loop will run for
+    // ever
     while Arc::strong_count(&mod_sender) > 1 || initial {
         if let Ok(mod_) = mod_rcvr.try_recv() {
             initial = false;
@@ -167,6 +169,40 @@ pub async fn upgrade(profile: &Profile, user: bool) -> Result<()> {
                     .is_some_and(|ext| ext.eq_ignore_ascii_case("jar"))
             {
                 to_install.push((file.file_name(), path));
+            }
+        }
+    }
+
+    if !profile.output_dir.exists() {
+        fs::create_dir(&profile.output_dir)?;
+    }
+
+    let disabled_slugs = profile
+        .disabled
+        .iter()
+        .map(|m| m.slug.clone().unwrap())
+        .collect::<Vec<_>>();
+
+    for entry in read_dir(&profile.output_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file() {
+            if let Some(ext) = path.extension() {
+                if ext.eq_ignore_ascii_case("jar") {
+                    if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
+                        if disabled_slugs.contains(&filename.to_string()) {
+                            let new_path = path.with_file_name(format!("{}.disabled", filename));
+                            fs::rename(&path, new_path)?;
+                        }
+                    }
+                } else if ext.eq_ignore_ascii_case(".disabled") {
+                    if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
+                        if !disabled_slugs.contains(&filename.to_string()) {
+                            fs::remove_file(path)?;
+                        }
+                    }
+                }
             }
         }
     }

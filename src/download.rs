@@ -78,18 +78,6 @@ pub async fn clean(
     Ok(())
 }
 
-/// Construct a `to_install` vector from the `directory`
-pub fn read_overrides(directory: &Path) -> Result<Vec<(OsString, PathBuf)>> {
-    let mut to_install = Vec::new();
-    if directory.exists() {
-        for file in read_dir(directory)? {
-            let file = file?;
-            to_install.push((file.file_name(), file.path()));
-        }
-    }
-    Ok(to_install)
-}
-
 /// Download and install the files in `to_download` and `to_install` to `output_dir`
 pub async fn download(
     output_dir: PathBuf,
