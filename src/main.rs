@@ -17,15 +17,13 @@ use config::{Config, File};
 use disable::disable;
 use dotenvy::dotenv;
 use libium::{
-    config::{
-        filters::ProfileParameters,
-        structs::{Mod, ModIdentifier, ModLoader, Profile},
-    },
+    config::structs::{Mod, ModIdentifier, ModLoader, Profile},
     iter_ext::IterExt,
 };
 use remove::remove;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
     env, fs,
     io::Write,
     process::{Command, Stdio},
@@ -56,6 +54,7 @@ enum KeyStoreConfig {
 struct FeriumConfig {
     game_versions: Vec<String>,
     mod_loaders: Vec<ModLoader>,
+    overrides: HashMap<String, ModIdentifier>,
     mods: Vec<Mod>,
     disabled: Vec<Mod>,
 }
@@ -77,6 +76,7 @@ impl FerriteConfig {
             ferium: FeriumConfig {
                 mod_loaders,
                 game_versions,
+                overrides: HashMap::new(),
                 mods: vec![],
                 disabled: vec![],
             },
@@ -143,7 +143,7 @@ async fn main() -> Result<()> {
             display_successes_failures(&successes, failures);
 
             if config.autoupdate {
-                upgrade(&profile, false).await?;
+                upgrade(&profile, false, &config.ferium.overrides).await?;
             }
 
             config.update(profile);
@@ -187,7 +187,7 @@ async fn main() -> Result<()> {
             remove(&mut profile, mod_names)?;
 
             if config.autoupdate {
-                upgrade(&profile, false).await?;
+                upgrade(&profile, false, &config.ferium.overrides).await?;
             }
 
             config.update(profile);
@@ -200,7 +200,7 @@ async fn main() -> Result<()> {
             disable(&mut profile, mod_names)?;
 
             if config.autoupdate {
-                upgrade(&profile, false).await?;
+                upgrade(&profile, false, &config.ferium.overrides).await?;
             }
 
             config.update(profile);
@@ -210,7 +210,7 @@ async fn main() -> Result<()> {
             let config = load_config()?;
             let profile = Profile::from(config.clone());
 
-            upgrade(&profile, true).await?;
+            upgrade(&profile, true, &config.ferium.overrides).await?;
         }
 
         SubCommands::Init {

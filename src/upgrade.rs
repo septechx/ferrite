@@ -11,6 +11,7 @@ use libium::{
 };
 use parking_lot::Mutex;
 use std::{
+    collections::HashMap,
     fs::{self, read_dir},
     mem::take,
     sync::{Arc, mpsc},
@@ -25,6 +26,7 @@ use tokio::task::JoinSet;
 pub async fn get_platform_downloadables(
     profile: &Profile,
     user: bool,
+    overrides: &HashMap<String, ModIdentifier>,
 ) -> Result<(Vec<DownloadData>, bool)> {
     let style = ProgressStyle::default_bar()
         .template("{spinner} {elapsed} [{wide_bar:.cyan/blue}] {pos:.cyan}/{len:.blue}")
@@ -78,6 +80,7 @@ pub async fn get_platform_downloadables(
             progress_bar.lock().inc_length(1);
 
             let filters = profile.filters.clone();
+            let overrides = overrides.clone();
             let dep_sender = Arc::clone(&mod_sender);
             let progress_bar = Arc::clone(&progress_bar);
 
@@ -94,10 +97,24 @@ pub async fn get_platform_downloadables(
                             download_file.filename().dimmed()
                         ));
                         for dep in take(&mut download_file.dependencies) {
+                            let override_identifier = match &dep {
+                                ModIdentifier::ModrinthProject(id) => id.clone(),
+                                ModIdentifier::CurseForgeProject(id) => id.to_string(),
+                                ModIdentifier::GitHubRepository(user, repo) => {
+                                    format!("{}/{}", user, repo)
+                                }
+                                _ => todo!(),
+                            };
+
+                            let mut identifier = dep;
+                            if let Some(override_) = overrides.get(&override_identifier) {
+                                identifier = override_.clone();
+                            };
+
                             dep_sender.send(Mod::new(
                                 format!(
                                     "Dependency: {}",
-                                    match &dep {
+                                    match &identifier {
                                         ModIdentifier::CurseForgeProject(id) => id.to_string(),
                                         ModIdentifier::ModrinthProject(id)
                                         | ModIdentifier::PinnedModrinthProject(id, _) =>
@@ -105,12 +122,7 @@ pub async fn get_platform_downloadables(
                                         _ => unreachable!(),
                                     }
                                 ),
-                                match dep {
-                                    ModIdentifier::PinnedModrinthProject(id, _) => {
-                                        ModIdentifier::ModrinthProject(id)
-                                    }
-                                    _ => dep,
-                                },
+                                identifier,
                                 vec![],
                                 false,
                             ))?;
@@ -154,8 +166,12 @@ pub async fn get_platform_downloadables(
     Ok((to_download, error))
 }
 
-pub async fn upgrade(profile: &Profile, user: bool) -> Result<()> {
-    let (mut to_download, error) = get_platform_downloadables(profile, user).await?;
+pub async fn upgrade(
+    profile: &Profile,
+    user: bool,
+    overrides: &HashMap<String, ModIdentifier>,
+) -> Result<()> {
+    let (mut to_download, error) = get_platform_downloadables(profile, user, overrides).await?;
     let mut to_install = Vec::new();
     if profile.output_dir.join("user").exists()
         && profile.filters.mod_loader() != Some(&ModLoader::Quilt)
