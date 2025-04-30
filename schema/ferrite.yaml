@@ -1,0 +1,17 @@
+autoupdate: bool,
+key_store: { DotEnv, Pass }
+server:
+  wrapper: String
+  executable: String
+ferium:
+  mods:
+    # Modrinth / Curseforge mod
+    - name: String
+      identifier: String
+      slug: String
+    # Github releases mod
+    - name: String
+      identifier:
+        - String
+        - String
+      slug: String

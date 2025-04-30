@@ -83,7 +83,9 @@ impl FerriteConfig {
         let serialized = serde_yml::to_string(self)?;
 
         let mut file = fs::File::create("ferrite.yaml")?;
-        file.write_all("# key_store: Pass / DotEnv\n".as_bytes())?;
+        file.write_all(
+            "# https://github.com/septechx/ferrite/blob/master/schema/ferrite.yaml\n".as_bytes(),
+        )?;
         file.write_all(serialized.as_bytes())?;
 
         Ok(())
@@ -237,7 +239,9 @@ fn load_config() -> Result<FerriteConfig> {
         KeyStoreConfig::DotEnv => {
             if !fs::exists(".env")? {
                 let mut file = fs::File::create(".env")?;
-                file.write_all("# GITHUB_TOKEN / CURSEFORGE_API_KEY".as_bytes())?;
+                file.write_all(
+                    "# https://github.com/septechx/ferrite/blob/master/schema/.env".as_bytes(),
+                )?;
             };
 
             dotenv().ok();
