@@ -4,6 +4,17 @@ server:
   wrapper: String
   executable: String
 ferium:
+  game_versions:
+  - String
+  mod_loaders:
+  - String
+  overrides:
+    # Modrinth / Curseforge mod
+    String: String
+    # Github releases mod
+    String:
+      - String
+      - String
   mods:
     # Modrinth / Curseforge mod
     - name: String

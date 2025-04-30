@@ -28,15 +28,23 @@ pub enum SubCommands {
 
     #[clap(visible_alias = "rm")]
     Remove {
+        #[clap(required = true)]
         mod_names: Vec<String>,
     },
 
     Disable {
+        #[clap(required = true)]
         mod_names: Vec<String>,
     },
 
     Override {
+        #[clap(required = true)]
         mod_override: Vec<String>,
+    },
+
+    Script {
+        #[clap(required = true)]
+        script: String,
     },
 
     #[clap(visible_alias = "ls")]

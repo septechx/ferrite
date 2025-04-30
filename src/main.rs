@@ -4,6 +4,7 @@ mod disable;
 mod download;
 mod init;
 mod remove;
+mod scripts;
 mod server;
 mod structs;
 mod upgrade;
@@ -259,6 +260,14 @@ async fn main() -> Result<()> {
                 .stderr(Stdio::inherit())
                 .spawn()?
                 .wait()?;
+        }
+
+        SubCommands::Script { script } => {
+            let mut config = load_config()?;
+
+            scripts::run(&mut config, &script)?;
+
+            config.write_config()?;
         }
 
         _ => todo!(),
