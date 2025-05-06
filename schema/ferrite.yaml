@@ -1,3 +1,4 @@
+#version::1
 autoupdate: bool,
 key_store: { DotEnv, Pass }
 server:

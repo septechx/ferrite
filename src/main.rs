@@ -89,7 +89,8 @@ impl FerriteConfig {
 
         let mut file = fs::File::create("ferrite.yaml")?;
         file.write_all(
-            "# https://github.com/septechx/ferrite/blob/master/schema/ferrite.yaml\n".as_bytes(),
+            "#version::1\n# https://github.com/septechx/ferrite/blob/master/schema/ferrite.yaml\n"
+                .as_bytes(),
         )?;
         file.write_all(serialized.as_bytes())?;
 

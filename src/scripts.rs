@@ -18,8 +18,8 @@ pub fn run(config: &mut FerriteConfig, script: &str) -> Result<()> {
                 ModIdentifier::ModrinthProject(String::from("Aqlf1Shp")),
             );
             config.ferium.mods.push(Mod::new(
-                "Connector Extras",
-                ModIdentifier::ModrinthProject("FYpiwiBR"),
+                String::from("Connector Extras"),
+                ModIdentifier::ModrinthProject(String::from("FYpiwiBR")),
                 vec![],
                 false,
             ));
