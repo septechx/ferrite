@@ -10,11 +10,11 @@ mod structs;
 mod upgrade;
 
 use add::display_successes_failures;
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use clap::Parser;
 use cli::{Ferrite, SubCommands};
 use colored::Colorize;
-use config::{Config, File};
+use config::{Config, ConfigError, File};
 use disable::disable;
 use dotenvy::dotenv;
 use libium::{
@@ -33,6 +33,7 @@ use upgrade::upgrade;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct FerriteConfig {
+    version: i64,
     autoupdate: bool,
     key_store: KeyStoreConfig,
     server: ServerConfig,
@@ -68,6 +69,7 @@ impl FerriteConfig {
         executable: String,
     ) -> Self {
         Self {
+            version: 1,
             autoupdate: true,
             key_store: KeyStoreConfig::DotEnv,
             server: ServerConfig {
@@ -89,8 +91,7 @@ impl FerriteConfig {
 
         let mut file = fs::File::create("ferrite.yaml")?;
         file.write_all(
-            "#version::1\n# https://github.com/septechx/ferrite/blob/master/schema/ferrite.yaml\n"
-                .as_bytes(),
+            "# https://github.com/septechx/ferrite/blob/master/schema/ferrite.yaml\n".as_bytes(),
         )?;
         file.write_all(serialized.as_bytes())?;
 
@@ -277,12 +278,27 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+fn fix_config_v0() -> Result<Config, ConfigError> {
+    Config::builder()
+        .add_source(File::with_name("ferrite").required(true))
+        .set_default("version", 1)?
+        .build()
+}
+
 fn load_config() -> Result<FerriteConfig> {
-    let serialized = Config::builder()
+    let mut serialized = Config::builder()
         .add_source(File::with_name("ferrite").required(true))
         .build()?;
 
-    let config: FerriteConfig = serialized.try_deserialize()?;
+    let version: i64 = serialized.get_int("version").unwrap_or_else(|_| {
+        serialized = fix_config_v0().unwrap();
+        1
+    });
+
+    let config: FerriteConfig = match version {
+        1 => Ok(serialized.try_deserialize()?),
+        _ => Err(anyhow!(format!("Invalid version: {}", version))),
+    }?;
 
     match config.key_store {
         KeyStoreConfig::DotEnv => {
