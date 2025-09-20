@@ -1,11 +1,11 @@
-use anyhow::{Ok, Result, bail};
+use anyhow::{bail, Ok, Result};
 use colored::Colorize;
-use ferinth::{Ferinth, structures::tag::GameVersion};
+use ferinth::{structures::tag::GameVersion, Ferinth};
 use inquire::MultiSelect;
 use libium::{config::structs::ModLoader, iter_ext::IterExt};
 
-use crate::FerriteConfig;
 use crate::server::ServerInstallation;
+use crate::FerriteConfig;
 
 /// Prompts the user to select mod loaders
 pub fn pick_mod_loader() -> Result<Vec<ModLoader>> {
@@ -14,6 +14,7 @@ pub fn pick_mod_loader() -> Result<Vec<ModLoader>> {
         ModLoader::Quilt,
         ModLoader::NeoForge,
         ModLoader::Forge,
+        ModLoader::Velocity,
     ];
     let picker = MultiSelect::new("Which mod loader do you use?", options.into());
     Ok(picker.prompt()?)
@@ -73,6 +74,7 @@ fn sort_mod_loaders(mod_loaders: &mut Vec<ModLoader>) {
         ModLoader::Forge => 1,
         ModLoader::Quilt => 2,
         ModLoader::Fabric => 3,
+        ModLoader::Velocity => 4,
     });
 }
 

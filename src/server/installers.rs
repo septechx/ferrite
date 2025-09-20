@@ -4,7 +4,7 @@ use indicatif::ProgressBar;
 use libium::iter_ext::IterExt;
 use std::{fs, process::Command};
 
-use super::{ServerInstallation, download_file_with_progress};
+use super::{download_file_with_progress, ServerInstallation};
 use crate::structs::*;
 
 /// Installs a Fabric server
@@ -198,6 +198,66 @@ pub async fn install_neoforge_server(
     })
 }
 
+/// Installs a Velocity proxy
+pub async fn install_velocity_proxy(
+    _game_version: &str,
+    progress_bar: &ProgressBar,
+) -> Result<ServerInstallation> {
+    progress_bar.set_message("Fetching Velocity proxy versions");
+
+    let user_agent = format!(
+        "ferrite/{} (github.com/septechx/ferrite)",
+        env!("CARGO_PKG_VERSION")
+    );
+
+    let velocity_version = fetch_velocity_proxy_version(&user_agent).await?;
+
+    progress_bar.set_message(format!(
+        "Downloading Velocity proxy jar ({})",
+        velocity_version.green()
+    ));
+
+    let client = reqwest::Client::new();
+    let url = format!(
+        "https://fill.papermc.io/v3/projects/velocity/versions/{}/builds",
+        velocity_version
+    );
+
+    let download_url = client
+        .get(url)
+        .header(reqwest::header::USER_AGENT, user_agent)
+        .send()
+        .await?
+        .json::<Vec<VelocityVersionBuild>>()
+        .await?;
+
+    let download_url = download_url
+        .first()
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No Velocity proxy download URL found for {}",
+                velocity_version
+            )
+        })?
+        .downloads
+        .server_default
+        .url
+        .clone();
+
+    let filename = download_file_with_progress(&download_url, progress_bar).await?;
+
+    progress_bar.finish_with_message(format!(
+        "✓ Successfully downloaded proxy jar for {} ({})",
+        velocity_version.green(),
+        "Velocity".green()
+    ));
+
+    Ok(ServerInstallation {
+        executable: filename,
+        wrapper: String::from("java -jar {}"),
+    })
+}
+
 /// Fetches the latest Fabric loader version for a given Minecraft version
 async fn fetch_fabric_loader_version(game_version: &str) -> Result<String> {
     let versions = reqwest::get(format!(
@@ -263,4 +323,26 @@ async fn fetch_neoforge_loader_version(game_version: &str) -> Result<String> {
         .ok_or_else(|| anyhow::anyhow!("No NeoForge loader version found for {}", game_version))
         .cloned()
         .cloned()
+}
+
+pub async fn fetch_velocity_proxy_version(user_agent: &str) -> Result<String> {
+    let client = reqwest::Client::new();
+
+    let latest_version = client
+        .get("https://fill.papermc.io/v3/projects/velocity/versions")
+        .header(reqwest::header::USER_AGENT, user_agent)
+        .send()
+        .await?
+        .json::<VelocityVersions>()
+        .await?;
+
+    let latest_version = latest_version
+        .versions
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("No Velocity versionx found"))?
+        .version
+        .id
+        .to_owned();
+
+    Ok(latest_version)
 }

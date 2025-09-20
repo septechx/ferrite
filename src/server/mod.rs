@@ -29,6 +29,7 @@ pub async fn get_server_jar(
         ModLoader::Forge => install_forge_server(game_version, &progress_bar).await,
         ModLoader::Quilt => install_quilt_server(game_version, &progress_bar).await,
         ModLoader::NeoForge => install_neoforge_server(game_version, &progress_bar).await,
+        ModLoader::Velocity => install_velocity_proxy(game_version, &progress_bar).await,
     }
 }
 
@@ -42,4 +43,3 @@ fn create_progress_bar(message: &str) -> ProgressBar {
     progress_bar.enable_steady_tick(std::time::Duration::from_millis(100));
     progress_bar
 }
-
