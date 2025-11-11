@@ -1,5 +1,5 @@
 use crate::download::{clean, download};
-use anyhow::{Result, anyhow, bail};
+use anyhow::{anyhow, bail, Result};
 use colored::Colorize as _;
 use indicatif::{ProgressBar, ProgressStyle};
 use libium::{
@@ -7,14 +7,14 @@ use libium::{
         filters::ProfileParameters as _,
         structs::{Mod, ModIdentifier, ModLoader, Profile},
     },
-    upgrade::{DownloadData, mod_downloadable},
+    upgrade::{mod_downloadable, DownloadData},
 };
 use parking_lot::Mutex;
 use std::{
     collections::HashMap,
     fs::{self, read_dir},
     mem::take,
-    sync::{Arc, mpsc},
+    sync::{mpsc, Arc},
     time::Duration,
 };
 use tokio::task::JoinSet;
@@ -101,7 +101,7 @@ pub async fn get_platform_downloadables(
                                 ModIdentifier::ModrinthProject(id) => id.clone(),
                                 ModIdentifier::CurseForgeProject(id) => id.to_string(),
                                 ModIdentifier::GitHubRepository(user, repo) => {
-                                    format!("{}/{}", user, repo)
+                                    format!("{user}/{repo}")
                                 }
                                 _ => todo!(),
                             };
@@ -208,7 +208,7 @@ pub async fn upgrade(
                 if ext.eq_ignore_ascii_case("jar") {
                     if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
                         if disabled_slugs.contains(&filename.to_string()) {
-                            let new_path = path.with_file_name(format!("{}.disabled", filename));
+                            let new_path = path.with_file_name(format!("{filename}.disabled"));
                             fs::rename(&path, new_path)?;
                         }
                     }
@@ -236,12 +236,12 @@ pub async fn upgrade(
         download(profile.output_dir.clone(), to_download, to_install).await?;
     }
 
-    // TODO: Fix error logging
-    if error && false {
-        Err(anyhow!(
-            "\nCould not get the latest compatible version of some mods"
-        ))
-    } else {
-        Ok(())
+    if error {
+        println!(
+            "\n{}",
+            "Could not get the latest compatible version of some mods".red()
+        )
     }
+
+    Ok(())
 }

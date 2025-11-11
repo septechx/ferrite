@@ -10,7 +10,7 @@ mod structs;
 mod upgrade;
 
 use add::display_successes_failures;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use cli::{Ferrite, SubCommands};
 use colored::Colorize;
