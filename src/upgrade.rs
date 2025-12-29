@@ -1,5 +1,5 @@
 use crate::download::{clean, download};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use colored::Colorize as _;
 use indicatif::{ProgressBar, ProgressStyle};
 use libium::{
@@ -7,14 +7,14 @@ use libium::{
         filters::ProfileParameters as _,
         structs::{Mod, ModIdentifier, ModLoader, Profile},
     },
-    upgrade::{mod_downloadable, DownloadData},
+    upgrade::{DownloadData, mod_downloadable},
 };
 use parking_lot::Mutex;
 use std::{
     collections::HashMap,
     fs::{self, read_dir},
     mem::take,
-    sync::{mpsc, Arc},
+    sync::{Arc, mpsc},
     time::Duration,
 };
 use tokio::task::JoinSet;
@@ -98,12 +98,14 @@ pub async fn get_platform_downloadables(
                         ));
                         for dep in take(&mut download_file.dependencies) {
                             let override_identifier = match &dep {
-                                ModIdentifier::ModrinthProject(id) => id.clone(),
-                                ModIdentifier::CurseForgeProject(id) => id.to_string(),
-                                ModIdentifier::GitHubRepository(user, repo) => {
+                                ModIdentifier::ModrinthProject(id)
+                                | ModIdentifier::PinnedModrinthProject(id, _) => id.clone(),
+                                ModIdentifier::CurseForgeProject(id)
+                                | ModIdentifier::PinnedCurseForgeProject(id, _) => id.to_string(),
+                                ModIdentifier::GitHubRepository(user, repo)
+                                | ModIdentifier::PinnedGitHubRepository((user, repo), _) => {
                                     format!("{user}/{repo}")
                                 }
-                                _ => todo!(),
                             };
 
                             let mut identifier = dep;
@@ -203,22 +205,20 @@ pub async fn upgrade(
         let entry = entry?;
         let path = entry.path();
 
-        if path.is_file() {
-            if let Some(ext) = path.extension() {
-                if ext.eq_ignore_ascii_case("jar") {
-                    if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
-                        if disabled_slugs.contains(&filename.to_string()) {
-                            let new_path = path.with_file_name(format!("{filename}.disabled"));
-                            fs::rename(&path, new_path)?;
-                        }
-                    }
-                } else if ext.eq_ignore_ascii_case(".disabled") {
-                    if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
-                        if !disabled_slugs.contains(&filename.to_string()) {
-                            fs::remove_file(path)?;
-                        }
-                    }
-                }
+        if path.is_file()
+            && let Some(ext) = path.extension()
+        {
+            if ext.eq_ignore_ascii_case("jar")
+                && let Some(filename) = path.file_name().and_then(|f| f.to_str())
+                && disabled_slugs.contains(&filename.to_string())
+            {
+                let new_path = path.with_file_name(format!("{filename}.disabled"));
+                fs::rename(&path, new_path)?;
+            } else if ext.eq_ignore_ascii_case(".disabled")
+                && let Some(filename) = path.file_name().and_then(|f| f.to_str())
+                && !disabled_slugs.contains(&filename.to_string())
+            {
+                fs::remove_file(path)?;
             }
         }
     }

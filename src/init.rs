@@ -1,11 +1,11 @@
-use anyhow::{bail, Ok, Result};
+use anyhow::{Ok, Result, bail};
 use colored::Colorize;
-use ferinth::{structures::tag::GameVersion, Ferinth};
+use ferinth::{Ferinth, structures::tag::GameVersion};
 use inquire::MultiSelect;
 use libium::{config::structs::ModLoader, iter_ext::IterExt};
 
-use crate::server::ServerInstallation;
 use crate::FerriteConfig;
+use crate::server::ServerInstallation;
 
 /// Prompts the user to select mod loaders
 pub fn pick_mod_loader() -> Result<Vec<ModLoader>> {
@@ -37,8 +37,7 @@ pub async fn pick_minecraft_versions() -> Result<Vec<String>> {
     let versions = fetch_minecraft_versions().await?;
     let display_versions = versions
         .iter()
-        .enumerate()
-        .map(|(_, v)| {
+        .map(|v| {
             if v.major {
                 v.version.bold()
             } else {
@@ -68,7 +67,7 @@ pub async fn pick_minecraft_versions() -> Result<Vec<String>> {
 }
 
 /// Sorts mod loaders in a consistent order
-fn sort_mod_loaders(mod_loaders: &mut Vec<ModLoader>) {
+fn sort_mod_loaders(mod_loaders: &mut [ModLoader]) {
     mod_loaders.sort_by_key(|loader| match loader {
         ModLoader::NeoForge => 0,
         ModLoader::Forge => 1,

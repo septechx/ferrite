@@ -10,7 +10,7 @@ mod structs;
 mod upgrade;
 
 use add::display_successes_failures;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use clap::Parser;
 use cli::{Ferrite, SubCommands};
 use colored::Colorize;
@@ -165,19 +165,24 @@ async fn main() -> Result<()> {
                 println!(
                     "{:20}  {}",
                     match &mod_.identifier {
-                        ModIdentifier::CurseForgeProject(id) =>
+                        ModIdentifier::CurseForgeProject(id)
+                        | ModIdentifier::PinnedCurseForgeProject(id, _) =>
                             format!("{} {:8}", "CF".red(), id.to_string().dimmed()),
-                        ModIdentifier::ModrinthProject(id) =>
+                        ModIdentifier::ModrinthProject(id)
+                        | ModIdentifier::PinnedModrinthProject(id, _) =>
                             format!("{} {:8}", "MR".green(), id.dimmed()),
-                        ModIdentifier::GitHubRepository(..) => "GH".purple().to_string(),
-                        _ => todo!(),
+                        ModIdentifier::GitHubRepository(..)
+                        | ModIdentifier::PinnedGitHubRepository(..) => "GH".purple().to_string(),
                     },
                     match &mod_.identifier {
-                        ModIdentifier::ModrinthProject(_) | ModIdentifier::CurseForgeProject(_) =>
+                        ModIdentifier::ModrinthProject(_)
+                        | ModIdentifier::CurseForgeProject(_)
+                        | ModIdentifier::PinnedModrinthProject(_, _)
+                        | ModIdentifier::PinnedCurseForgeProject(_, _) =>
                             mod_.name.bold().to_string(),
-                        ModIdentifier::GitHubRepository(owner, repo) =>
+                        ModIdentifier::GitHubRepository(owner, repo)
+                        | ModIdentifier::PinnedGitHubRepository((owner, repo), _) =>
                             format!("{}/{}", owner.dimmed(), repo.bold()),
-                        _ => todo!(),
                     },
                 );
             }
@@ -255,7 +260,7 @@ async fn main() -> Result<()> {
                 .replace("{}", &config.server.executable);
             let parts = wrapper.split(' ').collect_vec();
 
-            Command::new(&parts[0])
+            Command::new(parts[0])
                 .args(&parts[1..])
                 .stdin(Stdio::inherit())
                 .stdout(Stdio::inherit())
@@ -271,8 +276,6 @@ async fn main() -> Result<()> {
 
             config.write_config()?;
         }
-
-        _ => todo!(),
     }
 
     Ok(())
