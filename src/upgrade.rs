@@ -97,16 +97,7 @@ pub async fn get_platform_downloadables(
                             download_file.filename().dimmed()
                         ));
                         for dep in take(&mut download_file.dependencies) {
-                            let override_identifier = match &dep {
-                                ModIdentifier::ModrinthProject(id)
-                                | ModIdentifier::PinnedModrinthProject(id, _) => id.clone(),
-                                ModIdentifier::CurseForgeProject(id)
-                                | ModIdentifier::PinnedCurseForgeProject(id, _) => id.to_string(),
-                                ModIdentifier::GitHubRepository(user, repo)
-                                | ModIdentifier::PinnedGitHubRepository((user, repo), _) => {
-                                    format!("{user}/{repo}")
-                                }
-                            };
+                            let override_identifier = dep.display_name();
 
                             let mut identifier = dep;
                             if let Some(override_) = overrides.get(&override_identifier) {
@@ -114,16 +105,7 @@ pub async fn get_platform_downloadables(
                             };
 
                             dep_sender.send(Mod::new(
-                                format!(
-                                    "Dependency: {}",
-                                    match &identifier {
-                                        ModIdentifier::CurseForgeProject(id) => id.to_string(),
-                                        ModIdentifier::ModrinthProject(id)
-                                        | ModIdentifier::PinnedModrinthProject(id, _) =>
-                                            id.to_owned(),
-                                        _ => unreachable!(),
-                                    }
-                                ),
+                                format!("Dependency: {}", identifier.display_name()),
                                 identifier,
                                 vec![],
                                 false,
