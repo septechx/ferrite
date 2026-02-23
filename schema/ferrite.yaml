@@ -1,5 +1,6 @@
-version: 3
+version: 4
 autoupdate: bool
+output_path: String
 key_store: { DotEnv, Pass }
 server:
   wrapper: String

@@ -35,6 +35,7 @@ use upgrade::upgrade;
 struct FerriteConfig {
     version: i64,
     autoupdate: bool,
+    output_path: String,
     key_store: KeyStoreConfig,
     server: ServerConfig,
     ferium: FeriumConfig,
@@ -68,9 +69,15 @@ impl FerriteConfig {
         wrapper: String,
         executable: String,
     ) -> Self {
+        let output_path = if mod_loaders.contains(&ModLoader::Velocity) {
+            "plugins".to_string()
+        } else {
+            "mods".to_string()
+        };
         Self {
-            version: 2,
+            version: 4,
             autoupdate: true,
+            output_path,
             key_store: KeyStoreConfig::DotEnv,
             server: ServerConfig {
                 wrapper,
@@ -113,7 +120,7 @@ impl From<FerriteConfig> for Profile {
             String::from("ferrite"),
             env::current_dir()
                 .expect("Failed to get current directory")
-                .join("mods"),
+                .join(&config.output_path),
             config.ferium.game_versions,
             config.ferium.mod_loaders,
             config.ferium.mods,
@@ -318,17 +325,17 @@ fn upgrade_config_to_v3(content: &str) -> String {
                 .collect(),
             ),
             serde_norway::Value::Mapping(map)
-                if map.contains_key(&serde_norway::Value::String("github".to_string())) =>
+                if map.contains_key(serde_norway::Value::String("github".to_string())) =>
             {
                 if let Some(serde_norway::Value::Mapping(github_map)) =
-                    map.get(&serde_norway::Value::String("github".to_string()))
+                    map.get(serde_norway::Value::String("github".to_string()))
                 {
                     let owner = github_map
-                        .get(&serde_norway::Value::String("owner".to_string()))
+                        .get(serde_norway::Value::String("owner".to_string()))
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
                     let repo = github_map
-                        .get(&serde_norway::Value::String("repo".to_string()))
+                        .get(serde_norway::Value::String("repo".to_string()))
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
                     serde_norway::Value::Mapping(
@@ -430,33 +437,91 @@ fn upgrade_config_to_v3(content: &str) -> String {
     }
 }
 
-fn load_config() -> Result<FerriteConfig> {
-    let config_content = fs::read_to_string("ferrite.yaml")?;
+const LATEST_CONFIG_VERSION: i64 = 4;
 
-    let version: i64 = serde_norway::from_str::<serde_norway::Value>(&config_content)
+fn detect_config_version(content: &str) -> i64 {
+    serde_norway::from_str::<serde_norway::Value>(content)
         .ok()
         .and_then(|v| v.get("version").and_then(|vv| vv.as_i64()))
-        .unwrap_or(0);
+        .unwrap_or(0)
+}
 
-    let config_content = if version < 3 {
+fn upgrade_config_to_v4(content: &str) -> String {
+    let yaml: serde_norway::Value = serde_norway::from_str(content).unwrap();
+
+    if let serde_norway::Value::Mapping(root) = &yaml {
+        let mut new_root = root.clone();
+
+        let has_velocity = root
+            .get(serde_norway::Value::String("ferium".to_string()))
+            .and_then(|ferium| ferium.get("mod_loaders"))
+            .and_then(|loaders| loaders.as_sequence())
+            .map(|loaders| {
+                loaders.iter().any(|l| {
+                    l.as_str()
+                        .map(|s| s.to_lowercase() == "velocity")
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false);
+
+        let output_path = if has_velocity { "plugins" } else { "mods" };
+
+        new_root.insert(
+            serde_norway::Value::String("output_path".to_string()),
+            serde_norway::Value::String(output_path.to_string()),
+        );
+
+        new_root.insert(
+            serde_norway::Value::String("version".to_string()),
+            serde_norway::Value::Number(serde_norway::Number::from(4)),
+        );
+
+        serde_norway::to_string(&serde_norway::Value::Mapping(new_root))
+            .unwrap_or_else(|_| content.to_string())
+    } else {
+        content.to_string()
+    }
+}
+
+fn upgrade_config(content: &str, from_version: i64) -> Option<String> {
+    match from_version {
+        v if v < 3 => Some(upgrade_config_to_v3(content)),
+        3 => Some(upgrade_config_to_v4(content)),
+        _ => None,
+    }
+}
+
+fn load_config() -> Result<FerriteConfig> {
+    let mut config_content = fs::read_to_string("ferrite.yaml")?;
+    let mut version = detect_config_version(&config_content);
+    let original_version = version;
+
+    if version < LATEST_CONFIG_VERSION {
         println!(
-            "{} Detected config version {}. Auto-upgrading to version 3...",
+            "{} Upgrading config from version {} to {}...",
             "⚠".yellow(),
+            original_version,
             version
         );
-        let upgraded = upgrade_config_to_v3(&config_content);
-        fs::write("ferrite.yaml", &upgraded)?;
-        println!(
-            "{} Config upgraded to version 3. Please review the changes.",
-            "✓".green()
-        );
-        upgraded
-    } else {
-        config_content
-    };
+    }
 
-    let config: FerriteConfig =
-        serde_norway::from_str(&config_content).map_err(|e| anyhow!("Failed to parse config: {}", e))?;
+    while version < LATEST_CONFIG_VERSION {
+        if let Some(upgraded) = upgrade_config(&config_content, version) {
+            config_content = upgraded;
+            version += 1;
+        } else {
+            break;
+        }
+    }
+
+    if version > original_version {
+        fs::write("ferrite.yaml", &config_content)?;
+        println!("{} Config upgraded to version {}.", "✓".green(), version);
+    }
+
+    let config: FerriteConfig = serde_norway::from_str(&config_content)
+        .map_err(|e| anyhow!("Failed to parse config: {}", e))?;
 
     match config.key_store {
         KeyStoreConfig::DotEnv => {
