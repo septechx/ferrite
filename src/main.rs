@@ -227,24 +227,25 @@ async fn main() -> Result<()> {
             upgrade(&profile, true, &config.ferium.overrides).await?;
         }
 
-        SubCommands::Override { mod_override } => {
+        SubCommands::Override {
+            mod_name,
+            identifier,
+        } => {
             let mut config = load_config()?;
 
-            anyhow::ensure!(mod_override.len() == 2, "Invalid amount of arguments");
-
-            let identifier: ModIdentifier = if mod_override[1].contains('/') {
-                let split = mod_override[1].split_once('/').unwrap();
+            let parsed_identifier: ModIdentifier = if identifier.contains('/') {
+                let split = identifier.split_once('/').unwrap();
                 ModIdentifier::GitHubRepository((split.0.to_string(), split.1.to_string()), None)
-            } else if mod_override[1].chars().all(|c| c.is_ascii_digit()) {
-                ModIdentifier::CurseForgeProject(mod_override[1].parse::<i32>()?, None)
+            } else if identifier.chars().all(|c| c.is_ascii_digit()) {
+                ModIdentifier::CurseForgeProject(identifier.parse::<i32>()?, None)
             } else {
-                ModIdentifier::ModrinthProject(mod_override[1].clone(), None)
+                ModIdentifier::ModrinthProject(identifier.clone(), None)
             };
 
             config
                 .ferium
                 .overrides
-                .insert(mod_override[0].clone(), identifier);
+                .insert(mod_name.clone(), parsed_identifier);
 
             config.write_config()?;
         }
@@ -298,11 +299,23 @@ fn upgrade_config_v1_to_v2(content: &str) -> String {
                 serde_norway::Value::Mapping(
                     [(
                         serde_norway::Value::String("github".to_string()),
-                        serde_norway::Value::Mapping([
-                            (serde_norway::Value::String("owner".to_string()), serde_norway::Value::String(owner.to_string())),
-                            (serde_norway::Value::String("repo".to_string()), serde_norway::Value::String(repo.to_string())),
-                        ].into_iter().collect()),
-                    )].into_iter().collect(),
+                        serde_norway::Value::Mapping(
+                            [
+                                (
+                                    serde_norway::Value::String("owner".to_string()),
+                                    serde_norway::Value::String(owner.to_string()),
+                                ),
+                                (
+                                    serde_norway::Value::String("repo".to_string()),
+                                    serde_norway::Value::String(repo.to_string()),
+                                ),
+                            ]
+                            .into_iter()
+                            .collect(),
+                        ),
+                    )]
+                    .into_iter()
+                    .collect(),
                 )
             }
             _ => value.clone(),
@@ -310,64 +323,80 @@ fn upgrade_config_v1_to_v2(content: &str) -> String {
     }
 
     fn convert_mod_list(mods: &[serde_norway::Value]) -> Vec<serde_norway::Value> {
-        mods.iter().map(|m| {
-            if let serde_norway::Value::Mapping(map) = m {
-                let mut new_map = map.clone();
-                if let Some(identifier) = map.get(&serde_norway::Value::String("identifier".to_string())) {
-                    new_map.insert(
-                        serde_norway::Value::String("identifier".to_string()),
-                        convert_github_identifier(identifier),
-                    );
+        mods.iter()
+            .map(|m| {
+                if let serde_norway::Value::Mapping(map) = m {
+                    let mut new_map = map.clone();
+                    if let Some(identifier) =
+                        map.get(serde_norway::Value::String("identifier".to_string()))
+                    {
+                        new_map.insert(
+                            serde_norway::Value::String("identifier".to_string()),
+                            convert_github_identifier(identifier),
+                        );
+                    }
+                    serde_norway::Value::Mapping(new_map)
+                } else {
+                    m.clone()
                 }
-                serde_norway::Value::Mapping(new_map)
-            } else {
-                m.clone()
-            }
-        }).collect()
+            })
+            .collect()
     }
 
     if let serde_norway::Value::Mapping(root) = &yaml {
         let mut new_root = root.clone();
 
-        if let Some(ferium) = root.get(&serde_norway::Value::String("ferium".to_string())) {
-            if let serde_norway::Value::Mapping(ferium_map) = ferium {
-                let mut new_ferium = ferium_map.clone();
+        if let Some(ferium) = root.get(serde_norway::Value::String("ferium".to_string()))
+            && let serde_norway::Value::Mapping(ferium_map) = ferium
+        {
+            let mut new_ferium = ferium_map.clone();
 
-                if let Some(overrides) = ferium_map.get(&serde_norway::Value::String("overrides".to_string())) {
-                    if let serde_norway::Value::Mapping(overrides_map) = overrides {
-                        let mut new_overrides = serde_norway::Mapping::new();
-                        for (key, value) in overrides_map {
-                            new_overrides.insert(key.clone(), convert_github_identifier(value));
-                        }
-                        new_ferium.insert(serde_norway::Value::String("overrides".to_string()), serde_norway::Value::Mapping(new_overrides));
-                    }
+            if let Some(overrides) =
+                ferium_map.get(serde_norway::Value::String("overrides".to_string()))
+                && let serde_norway::Value::Mapping(overrides_map) = overrides
+            {
+                let mut new_overrides = serde_norway::Mapping::new();
+                for (key, value) in overrides_map {
+                    new_overrides.insert(key.clone(), convert_github_identifier(value));
                 }
-
-                if let Some(mods) = ferium_map.get(&serde_norway::Value::String("mods".to_string())) {
-                    if let serde_norway::Value::Sequence(mods_seq) = mods {
-                        new_ferium.insert(
-                            serde_norway::Value::String("mods".to_string()),
-                            serde_norway::Value::Sequence(convert_mod_list(mods_seq)),
-                        );
-                    }
-                }
-
-                if let Some(disabled) = ferium_map.get(&serde_norway::Value::String("disabled".to_string())) {
-                    if let serde_norway::Value::Sequence(disabled_seq) = disabled {
-                        new_ferium.insert(
-                            serde_norway::Value::String("disabled".to_string()),
-                            serde_norway::Value::Sequence(convert_mod_list(disabled_seq)),
-                        );
-                    }
-                }
-
-                new_root.insert(serde_norway::Value::String("ferium".to_string()), serde_norway::Value::Mapping(new_ferium));
+                new_ferium.insert(
+                    serde_norway::Value::String("overrides".to_string()),
+                    serde_norway::Value::Mapping(new_overrides),
+                );
             }
+
+            if let Some(mods) = ferium_map.get(serde_norway::Value::String("mods".to_string()))
+                && let serde_norway::Value::Sequence(mods_seq) = mods
+            {
+                new_ferium.insert(
+                    serde_norway::Value::String("mods".to_string()),
+                    serde_norway::Value::Sequence(convert_mod_list(mods_seq)),
+                );
+            }
+
+            if let Some(disabled) =
+                ferium_map.get(serde_norway::Value::String("disabled".to_string()))
+                && let serde_norway::Value::Sequence(disabled_seq) = disabled
+            {
+                new_ferium.insert(
+                    serde_norway::Value::String("disabled".to_string()),
+                    serde_norway::Value::Sequence(convert_mod_list(disabled_seq)),
+                );
+            }
+
+            new_root.insert(
+                serde_norway::Value::String("ferium".to_string()),
+                serde_norway::Value::Mapping(new_ferium),
+            );
         }
 
-        new_root.insert(serde_norway::Value::String("version".to_string()), serde_norway::Value::Number(serde_norway::Number::from(2)));
+        new_root.insert(
+            serde_norway::Value::String("version".to_string()),
+            serde_norway::Value::Number(serde_norway::Number::from(2)),
+        );
 
-        serde_norway::to_string(&serde_norway::Value::Mapping(new_root)).unwrap_or_else(|_| content.to_string())
+        serde_norway::to_string(&serde_norway::Value::Mapping(new_root))
+            .unwrap_or_else(|_| content.to_string())
     } else {
         content.to_string()
     }
@@ -383,15 +412,27 @@ fn load_config() -> Result<FerriteConfig> {
 
     if version == 0 || version == 1 {
         if version == 0 {
-            println!("{} Detected config version 0. Auto-upgrading to version 2...", "⚠".yellow());
+            println!(
+                "{} Detected config version 0. Auto-upgrading to version 2...",
+                "⚠".yellow()
+            );
             let upgraded = upgrade_config_v1_to_v2(&config_content);
             fs::write("ferrite.yaml", &upgraded)?;
-            println!("{} Config upgraded to version 2. Please review the changes.", "✓".green());
+            println!(
+                "{} Config upgraded to version 2. Please review the changes.",
+                "✓".green()
+            );
         } else {
-            println!("{} Detected config version 1. Auto-upgrading to version 2...", "⚠".yellow());
+            println!(
+                "{} Detected config version 1. Auto-upgrading to version 2...",
+                "⚠".yellow()
+            );
             let upgraded = upgrade_config_v1_to_v2(&config_content);
             fs::write("ferrite.yaml", &upgraded)?;
-            println!("{} Config upgraded to version 2. Please review the changes.", "✓".green());
+            println!(
+                "{} Config upgraded to version 2. Please review the changes.",
+                "✓".green()
+            );
         }
 
         let serialized = Config::builder()
