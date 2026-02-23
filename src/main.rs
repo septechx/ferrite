@@ -131,7 +131,10 @@ async fn main() -> Result<()> {
             let mut config = load_config()?;
             let mut profile = Profile::from(config.clone());
 
-            let identifiers: Vec<_> = identifiers.into_iter().map(libium::add::parse_id).collect();
+            let identifiers: Vec<_> = identifiers
+                .into_iter()
+                .map(libium::add::parse_id)
+                .collect::<Result<Vec<_>, _>>()?;
 
             let (successes, failures) =
                 libium::add(&mut profile, identifiers, true, false, vec![]).await?;
@@ -143,7 +146,10 @@ async fn main() -> Result<()> {
                     .any(|mod_| mod_.identifier == m.identifier)
             });
 
-            display_successes_failures(&successes, failures);
+            display_successes_failures(
+                &successes.iter().map(|(s, _)| s.clone()).collect::<Vec<_>>(),
+                failures,
+            );
 
             if config.autoupdate {
                 upgrade(&profile, false, &config.ferium.overrides).await?;
@@ -165,24 +171,24 @@ async fn main() -> Result<()> {
                 println!(
                     "{:20}  {}",
                     match &mod_.identifier {
-                        ModIdentifier::CurseForgeProject(id)
-                        | ModIdentifier::PinnedCurseForgeProject(id, _) =>
-                            format!("{} {:8}", "CF".red(), id.to_string().dimmed()),
-                        ModIdentifier::ModrinthProject(id)
-                        | ModIdentifier::PinnedModrinthProject(id, _) =>
-                            format!("{} {:8}", "MR".green(), id.dimmed()),
-                        ModIdentifier::GitHubRepository(..)
-                        | ModIdentifier::PinnedGitHubRepository(..) => "GH".purple().to_string(),
+                        ModIdentifier::CurseForgeProject(id, _) => {
+                            format!("{} {:8}", "CF".red(), id.to_string().dimmed())
+                        }
+                        ModIdentifier::ModrinthProject(id, version) => {
+                            if version.is_some() {
+                                format!("{} {:8}", "CF".red(), id.dimmed())
+                            } else {
+                                format!("{} {:8}", "MR".green(), id.dimmed())
+                            }
+                        }
+                        ModIdentifier::GitHubRepository(..) => "GH".purple().to_string(),
                     },
                     match &mod_.identifier {
-                        ModIdentifier::ModrinthProject(_)
-                        | ModIdentifier::CurseForgeProject(_)
-                        | ModIdentifier::PinnedModrinthProject(_, _)
-                        | ModIdentifier::PinnedCurseForgeProject(_, _) =>
-                            mod_.name.bold().to_string(),
-                        ModIdentifier::GitHubRepository(owner, repo)
-                        | ModIdentifier::PinnedGitHubRepository((owner, repo), _) =>
-                            format!("{}/{}", owner.dimmed(), repo.bold()),
+                        ModIdentifier::ModrinthProject(_, _)
+                        | ModIdentifier::CurseForgeProject(_, _) => mod_.name.bold().to_string(),
+                        ModIdentifier::GitHubRepository((owner, repo), _) => {
+                            format!("{}/{}", owner.dimmed(), repo.bold())
+                        }
                     },
                 );
             }
@@ -228,11 +234,11 @@ async fn main() -> Result<()> {
 
             let identifier: ModIdentifier = if mod_override[1].contains('/') {
                 let split = mod_override[1].split_once('/').unwrap();
-                ModIdentifier::GitHubRepository(split.0.to_string(), split.1.to_string())
+                ModIdentifier::GitHubRepository((split.0.to_string(), split.1.to_string()), None)
             } else if mod_override[1].chars().all(|c| c.is_ascii_digit()) {
-                ModIdentifier::CurseForgeProject(mod_override[1].parse::<i32>()?)
+                ModIdentifier::CurseForgeProject(mod_override[1].parse::<i32>()?, None)
             } else {
-                ModIdentifier::ModrinthProject(mod_override[1].clone())
+                ModIdentifier::ModrinthProject(mod_override[1].clone(), None)
             };
 
             config

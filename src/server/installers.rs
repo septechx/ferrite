@@ -1,10 +1,10 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use colored::Colorize;
 use indicatif::ProgressBar;
 use libium::iter_ext::IterExt;
 use std::{collections::HashMap, fs, process::Command};
 
-use super::{download_file_with_progress, ServerInstallation};
+use super::{ServerInstallation, download_file_with_progress};
 use crate::structs::*;
 
 pub trait Installer {

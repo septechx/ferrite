@@ -18,23 +18,16 @@ pub fn disable(profile: &mut Profile, to_disable: Vec<String>) -> Result<()> {
                 format!(
                     "{:11}  {}",
                     match &mod_.identifier {
-                        ModIdentifier::CurseForgeProject(id)
-                        | ModIdentifier::PinnedCurseForgeProject(id, _) =>
+                        ModIdentifier::CurseForgeProject(id, _) =>
                             format!("CF {:8}", id.to_string()),
-                        ModIdentifier::ModrinthProject(id)
-                        | ModIdentifier::PinnedModrinthProject(id, _) =>
-                            format!("MR {:8}", id.to_string()),
-                        ModIdentifier::GitHubRepository(..)
-                        | ModIdentifier::PinnedGitHubRepository(..) => format!("GH {:8}", "…"),
+                        ModIdentifier::ModrinthProject(id, _) => format!("MR {:8}", id.to_string()),
+                        ModIdentifier::GitHubRepository(..) => format!("GH {:8}", "…"),
                     },
                     match &mod_.identifier {
-                        ModIdentifier::ModrinthProject(_)
-                        | ModIdentifier::CurseForgeProject(_)
-                        | ModIdentifier::PinnedModrinthProject(_, _)
-                        | ModIdentifier::PinnedCurseForgeProject(_, _) => mod_.name.clone(),
-                        ModIdentifier::GitHubRepository(owner, repo)
-                        | ModIdentifier::PinnedGitHubRepository((owner, repo), _) => {
-                            format!("{owner}/{repo}")
+                        ModIdentifier::ModrinthProject(..)
+                        | ModIdentifier::CurseForgeProject(..) => mod_.name.clone(),
+                        ModIdentifier::GitHubRepository((owner, repo), _) => {
+                            format!("{}/{}", owner, repo)
                         }
                     },
                 )
@@ -51,18 +44,10 @@ pub fn disable(profile: &mut Profile, to_disable: Vec<String>) -> Result<()> {
         for to_disable in to_disable {
             if let Some(index) = profile.mods.iter().position(|mod_| {
                 mod_.name.eq_ignore_ascii_case(&to_disable)
-                    || match &mod_.identifier {
-                        ModIdentifier::CurseForgeProject(id)
-                        | ModIdentifier::PinnedCurseForgeProject(id, _) => {
-                            id.to_string() == to_disable
-                        }
-                        ModIdentifier::ModrinthProject(id)
-                        | ModIdentifier::PinnedModrinthProject(id, _) => id == &to_disable,
-                        ModIdentifier::GitHubRepository(owner, name)
-                        | ModIdentifier::PinnedGitHubRepository((owner, name), _) => {
-                            format!("{owner}/{name}").eq_ignore_ascii_case(&to_disable)
-                        }
-                    }
+                    || mod_
+                        .identifier
+                        .display_name()
+                        .eq_ignore_ascii_case(&to_disable)
                     || mod_
                         .slug
                         .as_ref()
