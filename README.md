@@ -109,3 +109,42 @@ Display all installed mods with their source platform and identifiers.
 ### `ferrite upgrade`
 
 Check and update all mods to their latest compatible versions.
+
+## Example config
+
+```yaml
+# https://github.com/septechx/ferrite/blob/master/schema/ferrite.yaml
+version: 4
+autoupdate: true
+key_store: Pass
+output_path: mods
+server:
+  wrapper: java -Xmx4G -jar {} nogui
+  executable: fabric-server-mc.1.21.11-loader.0.18.4-launcher.1.1.1.jar
+ferium:
+  game_versions:
+    - 1.21.11
+  mod_loaders:
+    - Fabric
+  overrides:
+    TQTTVgYE: !GitHubRepository
+      - gnembon
+      - fabric-carpet
+  mods:
+      slug: carpet-tis-addition
+    - name: Fast Backups
+      identifier: !ModrinthProject ZHKrK8Rp
+      slug: fastback
+    - name: Fabric API
+      identifier: !ModrinthProject P7dR8mSH
+      slug: fabric-api
+    - name: fabric-carpet
+      identifier: !GitHubRepository
+        - gnembon
+        - fabric-carpet
+      slug: fabric-carpet
+    - name: FerriteCore
+      identifier: !ModrinthProject uXXizFIs
+      slug: ferrite-core
+  disabled: []
+```
