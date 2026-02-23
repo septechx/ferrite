@@ -4,7 +4,7 @@ use ferinth::{Ferinth, structures::tag::GameVersion};
 use inquire::MultiSelect;
 use libium::{config::structs::ModLoader, iter_ext::IterExt};
 
-use crate::FerriteConfig;
+use crate::config::FerriteConfig;
 use crate::server::ServerInstallation;
 
 /// Prompts the user to select mod loaders

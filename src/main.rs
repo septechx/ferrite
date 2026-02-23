@@ -1,5 +1,6 @@
 mod add;
 mod cli;
+mod config;
 mod disable;
 mod download;
 mod init;
@@ -10,124 +11,16 @@ mod structs;
 mod upgrade;
 
 use add::display_successes_failures;
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use clap::Parser;
 use cli::{Ferrite, SubCommands};
 use colored::Colorize;
-
+use config::load_config;
 use disable::disable;
-use dotenvy::dotenv;
-use libium::{
-    config::structs::{Mod, ModIdentifier, ModLoader, Profile},
-    iter_ext::IterExt,
-};
+
+use libium::{config::structs::ModIdentifier, iter_ext::IterExt};
 use remove::remove;
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    env, fs,
-    io::Write,
-    process::{Command, Stdio},
-};
 use upgrade::upgrade;
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-struct FerriteConfig {
-    version: i64,
-    autoupdate: bool,
-    output_path: String,
-    key_store: KeyStoreConfig,
-    server: ServerConfig,
-    ferium: FeriumConfig,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-struct ServerConfig {
-    wrapper: String,
-    executable: String,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
-enum KeyStoreConfig {
-    Pass,
-    DotEnv,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-struct FeriumConfig {
-    game_versions: Vec<String>,
-    mod_loaders: Vec<ModLoader>,
-    overrides: HashMap<String, ModIdentifier>,
-    mods: Vec<Mod>,
-    disabled: Vec<Mod>,
-}
-
-impl FerriteConfig {
-    pub fn new(
-        game_versions: Vec<String>,
-        mod_loaders: Vec<ModLoader>,
-        wrapper: String,
-        executable: String,
-    ) -> Self {
-        let output_path = if mod_loaders.contains(&ModLoader::Velocity) {
-            "plugins".to_string()
-        } else {
-            "mods".to_string()
-        };
-        Self {
-            version: 4,
-            autoupdate: true,
-            output_path,
-            key_store: KeyStoreConfig::DotEnv,
-            server: ServerConfig {
-                wrapper,
-                executable,
-            },
-            ferium: FeriumConfig {
-                mod_loaders,
-                game_versions,
-                overrides: HashMap::new(),
-                mods: vec![],
-                disabled: vec![],
-            },
-        }
-    }
-
-    pub fn write_config(&self) -> Result<()> {
-        let serialized = serde_norway::to_string(self)?;
-
-        let mut file = fs::File::create("ferrite.yaml")?;
-        file.write_all(
-            "# https://github.com/septechx/ferrite/blob/master/schema/ferrite.yaml\n".as_bytes(),
-        )?;
-        file.write_all(serialized.as_bytes())?;
-
-        Ok(())
-    }
-
-    pub fn update(&mut self, profile: Profile) {
-        self.ferium.mods = profile.mods;
-        self.ferium.disabled = profile.disabled;
-        if let Err(e) = self.write_config() {
-            eprintln!("Error writing config: {}", e);
-        }
-    }
-}
-
-impl From<FerriteConfig> for Profile {
-    fn from(config: FerriteConfig) -> Self {
-        Self::new_complete(
-            String::from("ferrite"),
-            env::current_dir()
-                .expect("Failed to get current directory")
-                .join(&config.output_path),
-            config.ferium.game_versions,
-            config.ferium.mod_loaders,
-            config.ferium.mods,
-            config.ferium.disabled,
-        )
-    }
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -136,7 +29,7 @@ async fn main() -> Result<()> {
     match cli.subcommand {
         SubCommands::Add { identifiers } => {
             let mut config = load_config()?;
-            let mut profile = Profile::from(config.clone());
+            let mut profile = config.clone().into();
 
             let identifiers: Vec<_> = identifiers
                 .into_iter()
@@ -203,7 +96,7 @@ async fn main() -> Result<()> {
 
         SubCommands::Remove { mod_names } => {
             let mut config = load_config()?;
-            let mut profile = Profile::from(config.clone());
+            let mut profile = config.clone().into();
 
             remove(&mut profile, mod_names)?;
 
@@ -216,7 +109,7 @@ async fn main() -> Result<()> {
 
         SubCommands::Disable { mod_names } => {
             let mut config = load_config()?;
-            let mut profile = Profile::from(config.clone());
+            let mut profile = config.clone().into();
 
             disable(&mut profile, mod_names)?;
 
@@ -229,7 +122,7 @@ async fn main() -> Result<()> {
 
         SubCommands::Upgrade => {
             let config = load_config()?;
-            let profile = Profile::from(config.clone());
+            let profile = config.clone().into();
 
             upgrade(&profile, true, &config.ferium.overrides).await?;
         }
@@ -274,11 +167,11 @@ async fn main() -> Result<()> {
                 .replace("{}", &config.server.executable);
             let parts = wrapper.split(' ').collect_vec();
 
-            Command::new(parts[0])
+            std::process::Command::new(parts[0])
                 .args(&parts[1..])
-                .stdin(Stdio::inherit())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit())
+                .stdin(std::process::Stdio::inherit())
+                .stdout(std::process::Stdio::inherit())
+                .stderr(std::process::Stdio::inherit())
                 .spawn()?
                 .wait()?;
         }
@@ -293,271 +186,4 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-fn upgrade_config_to_v3(content: &str) -> String {
-    let yaml: serde_norway::Value = serde_norway::from_str(content).unwrap();
-
-    fn convert_identifier_to_tagged(value: &serde_norway::Value) -> serde_norway::Value {
-        match value {
-            serde_norway::Value::String(s) => serde_norway::Value::Mapping(
-                [(
-                    serde_norway::Value::String("ModrinthProject".to_string()),
-                    serde_norway::Value::String(s.clone()),
-                )]
-                .into_iter()
-                .collect(),
-            ),
-            serde_norway::Value::Number(n) => serde_norway::Value::Mapping(
-                [(
-                    serde_norway::Value::String("CurseForgeProject".to_string()),
-                    serde_norway::Value::Number(n.clone()),
-                )]
-                .into_iter()
-                .collect(),
-            ),
-            serde_norway::Value::Sequence(seq) if seq.len() == 2 => serde_norway::Value::Mapping(
-                [(
-                    serde_norway::Value::String("GitHubRepository".to_string()),
-                    serde_norway::Value::Sequence(seq.clone()),
-                )]
-                .into_iter()
-                .collect(),
-            ),
-            serde_norway::Value::Mapping(map)
-                if map.contains_key(serde_norway::Value::String("github".to_string())) =>
-            {
-                if let Some(serde_norway::Value::Mapping(github_map)) =
-                    map.get(serde_norway::Value::String("github".to_string()))
-                {
-                    let owner = github_map
-                        .get(serde_norway::Value::String("owner".to_string()))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    let repo = github_map
-                        .get(serde_norway::Value::String("repo".to_string()))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    serde_norway::Value::Mapping(
-                        [(
-                            serde_norway::Value::String("GitHubRepository".to_string()),
-                            serde_norway::Value::Sequence(vec![
-                                serde_norway::Value::String(owner.to_string()),
-                                serde_norway::Value::String(repo.to_string()),
-                            ]),
-                        )]
-                        .into_iter()
-                        .collect(),
-                    )
-                } else {
-                    value.clone()
-                }
-            }
-            _ => value.clone(),
-        }
-    }
-
-    fn convert_mod_list(mods: &[serde_norway::Value]) -> Vec<serde_norway::Value> {
-        mods.iter()
-            .map(|m| {
-                if let serde_norway::Value::Mapping(map) = m {
-                    let mut new_map = map.clone();
-                    if let Some(identifier) =
-                        map.get(serde_norway::Value::String("identifier".to_string()))
-                    {
-                        new_map.insert(
-                            serde_norway::Value::String("identifier".to_string()),
-                            convert_identifier_to_tagged(identifier),
-                        );
-                    }
-                    serde_norway::Value::Mapping(new_map)
-                } else {
-                    m.clone()
-                }
-            })
-            .collect()
-    }
-
-    if let serde_norway::Value::Mapping(root) = &yaml {
-        let mut new_root = root.clone();
-
-        if let Some(ferium) = root.get(serde_norway::Value::String("ferium".to_string()))
-            && let serde_norway::Value::Mapping(ferium_map) = ferium
-        {
-            let mut new_ferium = ferium_map.clone();
-
-            if let Some(overrides) =
-                ferium_map.get(serde_norway::Value::String("overrides".to_string()))
-                && let serde_norway::Value::Mapping(overrides_map) = overrides
-            {
-                let mut new_overrides = serde_norway::Mapping::new();
-                for (key, value) in overrides_map {
-                    new_overrides.insert(key.clone(), convert_identifier_to_tagged(value));
-                }
-                new_ferium.insert(
-                    serde_norway::Value::String("overrides".to_string()),
-                    serde_norway::Value::Mapping(new_overrides),
-                );
-            }
-
-            if let Some(mods) = ferium_map.get(serde_norway::Value::String("mods".to_string()))
-                && let serde_norway::Value::Sequence(mods_seq) = mods
-            {
-                new_ferium.insert(
-                    serde_norway::Value::String("mods".to_string()),
-                    serde_norway::Value::Sequence(convert_mod_list(mods_seq)),
-                );
-            }
-
-            if let Some(disabled) =
-                ferium_map.get(serde_norway::Value::String("disabled".to_string()))
-                && let serde_norway::Value::Sequence(disabled_seq) = disabled
-            {
-                new_ferium.insert(
-                    serde_norway::Value::String("disabled".to_string()),
-                    serde_norway::Value::Sequence(convert_mod_list(disabled_seq)),
-                );
-            }
-
-            new_root.insert(
-                serde_norway::Value::String("ferium".to_string()),
-                serde_norway::Value::Mapping(new_ferium),
-            );
-        }
-
-        new_root.insert(
-            serde_norway::Value::String("version".to_string()),
-            serde_norway::Value::Number(serde_norway::Number::from(3)),
-        );
-
-        serde_norway::to_string(&serde_norway::Value::Mapping(new_root))
-            .unwrap_or_else(|_| content.to_string())
-    } else {
-        content.to_string()
-    }
-}
-
-const LATEST_CONFIG_VERSION: i64 = 4;
-
-fn detect_config_version(content: &str) -> i64 {
-    serde_norway::from_str::<serde_norway::Value>(content)
-        .ok()
-        .and_then(|v| v.get("version").and_then(|vv| vv.as_i64()))
-        .unwrap_or(0)
-}
-
-fn upgrade_config_to_v4(content: &str) -> String {
-    let yaml: serde_norway::Value = serde_norway::from_str(content).unwrap();
-
-    if let serde_norway::Value::Mapping(root) = &yaml {
-        let mut new_root = root.clone();
-
-        let has_velocity = root
-            .get(serde_norway::Value::String("ferium".to_string()))
-            .and_then(|ferium| ferium.get("mod_loaders"))
-            .and_then(|loaders| loaders.as_sequence())
-            .map(|loaders| {
-                loaders.iter().any(|l| {
-                    l.as_str()
-                        .map(|s| s.to_lowercase() == "velocity")
-                        .unwrap_or(false)
-                })
-            })
-            .unwrap_or(false);
-
-        let output_path = if has_velocity { "plugins" } else { "mods" };
-
-        new_root.insert(
-            serde_norway::Value::String("output_path".to_string()),
-            serde_norway::Value::String(output_path.to_string()),
-        );
-
-        new_root.insert(
-            serde_norway::Value::String("version".to_string()),
-            serde_norway::Value::Number(serde_norway::Number::from(4)),
-        );
-
-        serde_norway::to_string(&serde_norway::Value::Mapping(new_root))
-            .unwrap_or_else(|_| content.to_string())
-    } else {
-        content.to_string()
-    }
-}
-
-fn upgrade_config(content: &str, from_version: i64) -> Option<String> {
-    match from_version {
-        v if v < 3 => Some(upgrade_config_to_v3(content)),
-        3 => Some(upgrade_config_to_v4(content)),
-        _ => None,
-    }
-}
-
-fn load_config() -> Result<FerriteConfig> {
-    let mut config_content = fs::read_to_string("ferrite.yaml")?;
-    let mut version = detect_config_version(&config_content);
-    let original_version = version;
-
-    if version < LATEST_CONFIG_VERSION {
-        println!(
-            "{} Upgrading config from version {} to {}...",
-            "⚠".yellow(),
-            original_version,
-            version
-        );
-    }
-
-    while version < LATEST_CONFIG_VERSION {
-        if let Some(upgraded) = upgrade_config(&config_content, version) {
-            config_content = upgraded;
-            version += 1;
-        } else {
-            break;
-        }
-    }
-
-    if version > original_version {
-        fs::write("ferrite.yaml", &config_content)?;
-        println!("{} Config upgraded to version {}.", "✓".green(), version);
-    }
-
-    let config: FerriteConfig = serde_norway::from_str(&config_content)
-        .map_err(|e| anyhow!("Failed to parse config: {}", e))?;
-
-    match config.key_store {
-        KeyStoreConfig::DotEnv => {
-            if !fs::exists(".env")? {
-                let mut file = fs::File::create(".env")?;
-                file.write_all(
-                    "# https://github.com/septechx/ferrite/blob/master/schema/.env".as_bytes(),
-                )?;
-            };
-
-            dotenv().ok();
-        }
-        KeyStoreConfig::Pass => {
-            let gh_token = Command::new("pass")
-                .arg("ferrite/github_token")
-                .output()
-                .expect("failed to run pass")
-                .stdout;
-
-            let token_str = String::from_utf8_lossy(&gh_token).trim().to_string();
-            unsafe {
-                env::set_var("GITHUB_TOKEN", token_str);
-            }
-
-            let cf_api_key = Command::new("pass")
-                .arg("ferrite/curseforge_api_key")
-                .output()
-                .expect("failed to run pass")
-                .stdout;
-
-            let key_str = String::from_utf8_lossy(&cf_api_key).trim().to_string();
-            unsafe {
-                env::set_var("CURSEFORGE_API_KEY", key_str);
-            }
-        }
-    }
-
-    Ok(config)
 }

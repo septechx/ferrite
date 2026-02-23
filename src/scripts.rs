@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use libium::config::structs::{Mod, ModIdentifier, ModLoader};
 
-use crate::FerriteConfig;
+use crate::config::FerriteConfig;
 
 pub fn run(config: &mut FerriteConfig, script: &str) -> Result<()> {
     match script {
