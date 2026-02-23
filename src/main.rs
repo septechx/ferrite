@@ -14,7 +14,7 @@ use anyhow::{Result, anyhow};
 use clap::Parser;
 use cli::{Ferrite, SubCommands};
 use colored::Colorize;
-use config::{Config, ConfigError, File};
+use config::{Config, File};
 use disable::disable;
 use dotenvy::dotenv;
 use libium::{
@@ -69,7 +69,7 @@ impl FerriteConfig {
         executable: String,
     ) -> Self {
         Self {
-            version: 1,
+            version: 2,
             autoupdate: true,
             key_store: KeyStoreConfig::DotEnv,
             server: ServerConfig {
@@ -287,25 +287,127 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn fix_config_v0() -> Result<Config, ConfigError> {
-    Config::builder()
-        .add_source(File::with_name("ferrite").required(true))
-        .set_default("version", 1)?
-        .build()
+fn upgrade_config_v1_to_v2(content: &str) -> String {
+    let yaml: serde_yml::Value = serde_yml::from_str(content).unwrap();
+
+    fn convert_github_identifier(value: &serde_yml::Value) -> serde_yml::Value {
+        match value {
+            serde_yml::Value::Sequence(seq) if seq.len() == 2 => {
+                let owner = seq[0].as_str().unwrap_or("");
+                let repo = seq[1].as_str().unwrap_or("");
+                serde_yml::Value::Mapping(
+                    [(
+                        serde_yml::Value::String("github".to_string()),
+                        serde_yml::Value::Mapping([
+                            (serde_yml::Value::String("owner".to_string()), serde_yml::Value::String(owner.to_string())),
+                            (serde_yml::Value::String("repo".to_string()), serde_yml::Value::String(repo.to_string())),
+                        ].into_iter().collect()),
+                    )].into_iter().collect(),
+                )
+            }
+            _ => value.clone(),
+        }
+    }
+
+    fn convert_mod_list(mods: &[serde_yml::Value]) -> Vec<serde_yml::Value> {
+        mods.iter().map(|m| {
+            if let serde_yml::Value::Mapping(map) = m {
+                let mut new_map = map.clone();
+                if let Some(identifier) = map.get(&serde_yml::Value::String("identifier".to_string())) {
+                    new_map.insert(
+                        serde_yml::Value::String("identifier".to_string()),
+                        convert_github_identifier(identifier),
+                    );
+                }
+                serde_yml::Value::Mapping(new_map)
+            } else {
+                m.clone()
+            }
+        }).collect()
+    }
+
+    if let serde_yml::Value::Mapping(root) = &yaml {
+        let mut new_root = root.clone();
+
+        if let Some(ferium) = root.get(&serde_yml::Value::String("ferium".to_string())) {
+            if let serde_yml::Value::Mapping(ferium_map) = ferium {
+                let mut new_ferium = ferium_map.clone();
+
+                if let Some(overrides) = ferium_map.get(&serde_yml::Value::String("overrides".to_string())) {
+                    if let serde_yml::Value::Mapping(overrides_map) = overrides {
+                        let mut new_overrides = serde_yml::Mapping::new();
+                        for (key, value) in overrides_map {
+                            new_overrides.insert(key.clone(), convert_github_identifier(value));
+                        }
+                        new_ferium.insert(serde_yml::Value::String("overrides".to_string()), serde_yml::Value::Mapping(new_overrides));
+                    }
+                }
+
+                if let Some(mods) = ferium_map.get(&serde_yml::Value::String("mods".to_string())) {
+                    if let serde_yml::Value::Sequence(mods_seq) = mods {
+                        new_ferium.insert(
+                            serde_yml::Value::String("mods".to_string()),
+                            serde_yml::Value::Sequence(convert_mod_list(mods_seq)),
+                        );
+                    }
+                }
+
+                if let Some(disabled) = ferium_map.get(&serde_yml::Value::String("disabled".to_string())) {
+                    if let serde_yml::Value::Sequence(disabled_seq) = disabled {
+                        new_ferium.insert(
+                            serde_yml::Value::String("disabled".to_string()),
+                            serde_yml::Value::Sequence(convert_mod_list(disabled_seq)),
+                        );
+                    }
+                }
+
+                new_root.insert(serde_yml::Value::String("ferium".to_string()), serde_yml::Value::Mapping(new_ferium));
+            }
+        }
+
+        new_root.insert(serde_yml::Value::String("version".to_string()), serde_yml::Value::Number(serde_yml::Number::from(2)));
+
+        serde_yml::to_string(&serde_yml::Value::Mapping(new_root)).unwrap_or_else(|_| content.to_string())
+    } else {
+        content.to_string()
+    }
 }
 
 fn load_config() -> Result<FerriteConfig> {
-    let mut serialized = Config::builder()
+    let config_content = fs::read_to_string("ferrite.yaml")?;
+
+    let version: i64 = serde_yml::from_str::<serde_yml::Value>(&config_content)
+        .ok()
+        .and_then(|v| v.get("version").and_then(|vv| vv.as_i64()))
+        .unwrap_or(0);
+
+    if version == 0 || version == 1 {
+        if version == 0 {
+            println!("{} Detected config version 0. Auto-upgrading to version 2...", "⚠".yellow());
+            let upgraded = upgrade_config_v1_to_v2(&config_content);
+            fs::write("ferrite.yaml", &upgraded)?;
+            println!("{} Config upgraded to version 2. Please review the changes.", "✓".green());
+        } else {
+            println!("{} Detected config version 1. Auto-upgrading to version 2...", "⚠".yellow());
+            let upgraded = upgrade_config_v1_to_v2(&config_content);
+            fs::write("ferrite.yaml", &upgraded)?;
+            println!("{} Config upgraded to version 2. Please review the changes.", "✓".green());
+        }
+
+        let serialized = Config::builder()
+            .add_source(File::with_name("ferrite").required(true))
+            .build()?;
+
+        let config: FerriteConfig = serialized.try_deserialize()?;
+        return Ok(config);
+    }
+
+    let serialized = Config::builder()
         .add_source(File::with_name("ferrite").required(true))
         .build()?;
 
-    let version: i64 = serialized.get_int("version").unwrap_or_else(|_| {
-        serialized = fix_config_v0().unwrap();
-        1
-    });
-
     let config: FerriteConfig = match version {
-        1 => Ok(serialized.try_deserialize()?),
+        2 => Ok(serialized.try_deserialize()?),
         _ => Err(anyhow!(format!("Invalid version: {}", version))),
     }?;
 

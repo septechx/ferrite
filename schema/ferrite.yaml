@@ -1,4 +1,4 @@
-version: 1
+version: 2
 autoupdate: bool,
 key_store: { DotEnv, Pass }
 server:
@@ -10,12 +10,13 @@ ferium:
   mod_loaders:
   - String
   overrides:
-    # Modrinth / Curseforge mod
+    # Modrinth / Curseforge mod: identifier as string
     String: String
-    # Github releases mod
+    # Github releases mod: identifier as table with github key
     String:
-      - String
-      - String
+      github:
+        owner: String
+        repo: String
   mods:
     # Modrinth / Curseforge mod
     - name: String
@@ -24,8 +25,9 @@ ferium:
     # Github releases mod
     - name: String
       identifier:
-        - String
-        - String
+        github:
+          owner: String
+          repo: String
       slug: String
   disabled:
     # Modrinth / Curseforge mod
@@ -35,6 +37,7 @@ ferium:
     # Github releases mod
     - name: String
       identifier:
-        - String
-        - String
+        github:
+          owner: String
+          repo: String
       slug: String
