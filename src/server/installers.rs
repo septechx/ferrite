@@ -4,8 +4,7 @@ use indicatif::ProgressBar;
 use libium::iter_ext::IterExt;
 use std::{collections::HashMap, fs, process::Command};
 
-use super::{ServerInstallation, download_file_with_progress};
-use crate::structs::*;
+use super::{ServerInstallation, download_file_with_progress, structs::*};
 
 pub trait Installer {
     async fn install(game_version: &str, progress_bar: &ProgressBar) -> Result<ServerInstallation>;

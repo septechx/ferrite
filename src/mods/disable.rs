@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use colored::Colorize as _;
 use inquire::MultiSelect;
 use libium::{

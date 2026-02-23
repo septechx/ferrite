@@ -1,5 +1,6 @@
 mod download;
 mod installers;
+mod structs;
 
 pub use download::*;
 pub use installers::*;

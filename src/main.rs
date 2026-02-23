@@ -1,25 +1,21 @@
-mod add;
 mod cli;
 mod config;
-mod disable;
-mod download;
 mod init;
-mod remove;
+mod mods;
 mod scripts;
 mod server;
-mod structs;
 mod upgrade;
 
-use add::display_successes_failures;
+use mods::display_successes_failures;
 use anyhow::Result;
 use clap::Parser;
 use cli::{Ferrite, SubCommands};
 use colored::Colorize;
 use config::load_config;
-use disable::disable;
+use mods::disable;
 
 use libium::{config::structs::ModIdentifier, iter_ext::IterExt};
-use remove::remove;
+use mods::remove;
 use upgrade::upgrade;
 
 #[tokio::main]

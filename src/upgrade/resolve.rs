@@ -1,4 +1,4 @@
-use crate::download::{clean, download};
+use super::download::{clean, download};
 use anyhow::{Result, anyhow, bail};
 use colored::Colorize as _;
 use indicatif::{ProgressBar, ProgressStyle};
