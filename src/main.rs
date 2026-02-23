@@ -14,7 +14,7 @@ use anyhow::{Result, anyhow};
 use clap::Parser;
 use cli::{Ferrite, SubCommands};
 use colored::Colorize;
-use config::{Config, File};
+
 use disable::disable;
 use dotenvy::dotenv;
 use libium::{
@@ -438,7 +438,7 @@ fn load_config() -> Result<FerriteConfig> {
         .and_then(|v| v.get("version").and_then(|vv| vv.as_i64()))
         .unwrap_or(0);
 
-    if version < 3 {
+    let config_content = if version < 3 {
         println!(
             "{} Detected config version {}. Auto-upgrading to version 3...",
             "⚠".yellow(),
@@ -450,23 +450,13 @@ fn load_config() -> Result<FerriteConfig> {
             "{} Config upgraded to version 3. Please review the changes.",
             "✓".green()
         );
+        upgraded
+    } else {
+        config_content
+    };
 
-        let serialized = Config::builder()
-            .add_source(File::with_name("ferrite").required(true))
-            .build()?;
-
-        let config: FerriteConfig = serialized.try_deserialize()?;
-        return Ok(config);
-    }
-
-    let serialized = Config::builder()
-        .add_source(File::with_name("ferrite").required(true))
-        .build()?;
-
-    let config: FerriteConfig = match version {
-        3 => Ok(serialized.try_deserialize()?),
-        _ => Err(anyhow!(format!("Invalid version: {}", version))),
-    }?;
+    let config: FerriteConfig =
+        serde_norway::from_str(&config_content).map_err(|e| anyhow!("Failed to parse config: {}", e))?;
 
     match config.key_store {
         KeyStoreConfig::DotEnv => {

@@ -1,5 +1,5 @@
 version: 3
-autoupdate: bool,
+autoupdate: bool
 key_store: { DotEnv, Pass }
 server:
   wrapper: String
@@ -11,49 +11,40 @@ ferium:
   - String
   overrides:
     # ModrinthProject
-    String:
-      ModrinthProject: String
+    String: !ModrinthProject String
     # CurseForgeProject
-    String:
-      CurseForgeProject: i32
+    String: !CurseForgeProject i32
     # GitHubRepository
-    String:
-      GitHubRepository:
-      - String
-      - String
+    String: !GitHubRepository
+    - String
+    - String
   mods:
     # ModrinthProject
     - name: String
-      identifier:
-        ModrinthProject: String
+      identifier: !ModrinthProject String
       slug: String
     # CurseForgeProject
     - name: String
-      identifier:
-        CurseForgeProject: i32
+      identifier: !CurseForgeProject i32
       slug: String
     # GitHubRepository
     - name: String
-      identifier:
-        GitHubRepository:
-        - String
-        - String
+      identifier: !GitHubRepository
+      - String
+      - String
       slug: String
   disabled:
     # ModrinthProject
     - name: String
-      identifier:
-        ModrinthProject: String
+      identifier: !ModrinthProject String
       slug: String
     # CurseForgeProject
     - name: String
-      identifier:
-        CurseForgeProject: i32
+      identifier: !CurseForgeProject i32
       slug: String
     # GitHubRepository
     - name: String
-      identifier:
-        GitHubRepository:
-        - String
-        - String
+      identifier: !GitHubRepository
+      - String
+      - String
       slug: String
