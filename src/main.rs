@@ -288,35 +288,63 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn upgrade_config_v1_to_v2(content: &str) -> String {
+fn upgrade_config_to_v3(content: &str) -> String {
     let yaml: serde_norway::Value = serde_norway::from_str(content).unwrap();
 
-    fn convert_github_identifier(value: &serde_norway::Value) -> serde_norway::Value {
+    fn convert_identifier_to_tagged(value: &serde_norway::Value) -> serde_norway::Value {
         match value {
-            serde_norway::Value::Sequence(seq) if seq.len() == 2 => {
-                let owner = seq[0].as_str().unwrap_or("");
-                let repo = seq[1].as_str().unwrap_or("");
-                serde_norway::Value::Mapping(
-                    [(
-                        serde_norway::Value::String("github".to_string()),
-                        serde_norway::Value::Mapping(
-                            [
-                                (
-                                    serde_norway::Value::String("owner".to_string()),
-                                    serde_norway::Value::String(owner.to_string()),
-                                ),
-                                (
-                                    serde_norway::Value::String("repo".to_string()),
-                                    serde_norway::Value::String(repo.to_string()),
-                                ),
-                            ]
-                            .into_iter()
-                            .collect(),
-                        ),
-                    )]
-                    .into_iter()
-                    .collect(),
-                )
+            serde_norway::Value::String(s) => serde_norway::Value::Mapping(
+                [(
+                    serde_norway::Value::String("ModrinthProject".to_string()),
+                    serde_norway::Value::String(s.clone()),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+            serde_norway::Value::Number(n) => serde_norway::Value::Mapping(
+                [(
+                    serde_norway::Value::String("CurseForgeProject".to_string()),
+                    serde_norway::Value::Number(n.clone()),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+            serde_norway::Value::Sequence(seq) if seq.len() == 2 => serde_norway::Value::Mapping(
+                [(
+                    serde_norway::Value::String("GitHubRepository".to_string()),
+                    serde_norway::Value::Sequence(seq.clone()),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+            serde_norway::Value::Mapping(map)
+                if map.contains_key(&serde_norway::Value::String("github".to_string())) =>
+            {
+                if let Some(serde_norway::Value::Mapping(github_map)) =
+                    map.get(&serde_norway::Value::String("github".to_string()))
+                {
+                    let owner = github_map
+                        .get(&serde_norway::Value::String("owner".to_string()))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let repo = github_map
+                        .get(&serde_norway::Value::String("repo".to_string()))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    serde_norway::Value::Mapping(
+                        [(
+                            serde_norway::Value::String("GitHubRepository".to_string()),
+                            serde_norway::Value::Sequence(vec![
+                                serde_norway::Value::String(owner.to_string()),
+                                serde_norway::Value::String(repo.to_string()),
+                            ]),
+                        )]
+                        .into_iter()
+                        .collect(),
+                    )
+                } else {
+                    value.clone()
+                }
             }
             _ => value.clone(),
         }
@@ -332,7 +360,7 @@ fn upgrade_config_v1_to_v2(content: &str) -> String {
                     {
                         new_map.insert(
                             serde_norway::Value::String("identifier".to_string()),
-                            convert_github_identifier(identifier),
+                            convert_identifier_to_tagged(identifier),
                         );
                     }
                     serde_norway::Value::Mapping(new_map)
@@ -357,7 +385,7 @@ fn upgrade_config_v1_to_v2(content: &str) -> String {
             {
                 let mut new_overrides = serde_norway::Mapping::new();
                 for (key, value) in overrides_map {
-                    new_overrides.insert(key.clone(), convert_github_identifier(value));
+                    new_overrides.insert(key.clone(), convert_identifier_to_tagged(value));
                 }
                 new_ferium.insert(
                     serde_norway::Value::String("overrides".to_string()),
@@ -392,7 +420,7 @@ fn upgrade_config_v1_to_v2(content: &str) -> String {
 
         new_root.insert(
             serde_norway::Value::String("version".to_string()),
-            serde_norway::Value::Number(serde_norway::Number::from(2)),
+            serde_norway::Value::Number(serde_norway::Number::from(3)),
         );
 
         serde_norway::to_string(&serde_norway::Value::Mapping(new_root))
@@ -410,30 +438,18 @@ fn load_config() -> Result<FerriteConfig> {
         .and_then(|v| v.get("version").and_then(|vv| vv.as_i64()))
         .unwrap_or(0);
 
-    if version == 0 || version == 1 {
-        if version == 0 {
-            println!(
-                "{} Detected config version 0. Auto-upgrading to version 2...",
-                "⚠".yellow()
-            );
-            let upgraded = upgrade_config_v1_to_v2(&config_content);
-            fs::write("ferrite.yaml", &upgraded)?;
-            println!(
-                "{} Config upgraded to version 2. Please review the changes.",
-                "✓".green()
-            );
-        } else {
-            println!(
-                "{} Detected config version 1. Auto-upgrading to version 2...",
-                "⚠".yellow()
-            );
-            let upgraded = upgrade_config_v1_to_v2(&config_content);
-            fs::write("ferrite.yaml", &upgraded)?;
-            println!(
-                "{} Config upgraded to version 2. Please review the changes.",
-                "✓".green()
-            );
-        }
+    if version < 3 {
+        println!(
+            "{} Detected config version {}. Auto-upgrading to version 3...",
+            "⚠".yellow(),
+            version
+        );
+        let upgraded = upgrade_config_to_v3(&config_content);
+        fs::write("ferrite.yaml", &upgraded)?;
+        println!(
+            "{} Config upgraded to version 3. Please review the changes.",
+            "✓".green()
+        );
 
         let serialized = Config::builder()
             .add_source(File::with_name("ferrite").required(true))
@@ -448,7 +464,7 @@ fn load_config() -> Result<FerriteConfig> {
         .build()?;
 
     let config: FerriteConfig = match version {
-        2 => Ok(serialized.try_deserialize()?),
+        3 => Ok(serialized.try_deserialize()?),
         _ => Err(anyhow!(format!("Invalid version: {}", version))),
     }?;
 
