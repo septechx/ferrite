@@ -79,4 +79,15 @@ pub enum SubCommands {
         about = "Upgrade all mods to latest versions"
     )]
     Upgrade,
+
+    #[clap(about = "Upgrade Minecraft version and update mods")]
+    UpdateVersion {
+        #[clap(
+            long,
+            short = 'v',
+            value_name = "VERSION",
+            help = "Target Minecraft version, e.g. 1.20.1"
+        )]
+        version: Option<String>,
+    },
 }

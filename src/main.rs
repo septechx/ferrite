@@ -4,6 +4,7 @@ mod init;
 mod mods;
 mod scripts;
 mod server;
+mod update_version;
 mod upgrade;
 
 use std::process::ExitCode;
@@ -50,6 +51,9 @@ pub enum FerriteError {
 
     #[error("Initialization error: {0}")]
     Init(#[from] init::InitError),
+
+    #[error("Version upgrade error: {0}")]
+    UpdateVersion(#[from] update_version::UpdateVersionError),
 
     #[error("Script error: {0}")]
     Script(#[from] scripts::ScriptError),
@@ -231,6 +235,12 @@ async fn run() -> Result<(), FerriteError> {
             scripts::run(&mut config, &script)?;
 
             config.write_config()?;
+        }
+
+        SubCommands::UpdateVersion { version } => {
+            let mut config = load_config()?;
+
+            update_version::upgrade_version(&mut config, version).await?;
         }
     }
 
