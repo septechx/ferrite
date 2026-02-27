@@ -1,7 +1,15 @@
-use anyhow::{Result, bail};
 use libium::config::structs::{Mod, ModIdentifier, ModLoader};
+use thiserror::Error;
 
 use crate::config::FerriteConfig;
+
+#[derive(Debug, Error)]
+pub enum ScriptError {
+    #[error("Invalid script: '{0}'. Available scripts: setup:quilt, setup:sinytra")]
+    InvalidScript(String),
+}
+
+pub type Result<T> = std::result::Result<T, ScriptError>;
 
 pub fn run(config: &mut FerriteConfig, script: &str) -> Result<()> {
     match script {
@@ -25,7 +33,7 @@ pub fn run(config: &mut FerriteConfig, script: &str) -> Result<()> {
             ));
             config.ferium.mod_loaders.push(ModLoader::Fabric);
         }
-        _ => bail!("Invalid script"),
+        _ => return Err(ScriptError::InvalidScript(script.to_string())),
     }
 
     Ok(())

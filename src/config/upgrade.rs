@@ -19,8 +19,12 @@ pub fn needs_upgrade(version: i64) -> bool {
     version < LATEST_CONFIG_VERSION
 }
 
+fn parse_yaml(content: &str) -> serde_norway::Value {
+    serde_norway::from_str(content).unwrap_or(serde_norway::Value::Null)
+}
+
 fn upgrade_config_to_v3(content: &str) -> String {
-    let yaml: serde_norway::Value = serde_norway::from_str(content).unwrap();
+    let yaml = parse_yaml(content);
 
     fn convert_identifier_to_tagged(value: &serde_norway::Value) -> serde_norway::Value {
         match value {
@@ -162,7 +166,7 @@ fn upgrade_config_to_v3(content: &str) -> String {
 }
 
 fn upgrade_config_to_v4(content: &str) -> String {
-    let yaml: serde_norway::Value = serde_norway::from_str(content).unwrap();
+    let yaml = parse_yaml(content);
 
     if let serde_norway::Value::Mapping(root) = &yaml {
         let mut new_root = root.clone();

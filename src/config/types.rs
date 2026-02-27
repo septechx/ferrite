@@ -1,4 +1,4 @@
-use anyhow::Result;
+use super::error::Result;
 use libium::config::structs::{Mod, ModIdentifier, ModLoader, Profile};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, env, fs, io::Write};
@@ -88,11 +88,10 @@ impl FerriteConfig {
 
 impl From<FerriteConfig> for Profile {
     fn from(config: FerriteConfig) -> Self {
+        let current_dir = env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
         Self::new_complete(
             String::from("ferrite"),
-            env::current_dir()
-                .expect("Failed to get current directory")
-                .join(&config.output_path),
+            current_dir.join(&config.output_path),
             config.ferium.game_versions,
             config.ferium.mod_loaders,
             config.ferium.mods,

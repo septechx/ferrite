@@ -1,11 +1,41 @@
-use anyhow::{Ok, Result, bail};
 use colored::Colorize;
 use ferinth::{Ferinth, structures::tag::GameVersion};
 use inquire::MultiSelect;
 use libium::{config::structs::ModLoader, iter_ext::IterExt};
+use thiserror::Error;
 
 use crate::config::FerriteConfig;
 use crate::server::ServerInstallation;
+
+#[derive(Debug, Error)]
+pub enum InitError {
+    #[error("API error: {0}")]
+    Api(#[from] ferinth::Error),
+
+    #[error("User input error: {0}")]
+    Input(String),
+
+    #[error("User cancelled input")]
+    Cancelled,
+
+    #[error("Server installation error: {0}")]
+    Server(#[from] crate::server::ServerError),
+
+    #[error("Provide both game versions and mod loaders to create a profile")]
+    MissingFields,
+}
+
+impl From<inquire::InquireError> for InitError {
+    fn from(e: inquire::InquireError) -> Self {
+        match e {
+            inquire::InquireError::OperationCanceled
+            | inquire::InquireError::OperationInterrupted => InitError::Cancelled,
+            _ => InitError::Input(e.to_string()),
+        }
+    }
+}
+
+pub type Result<T> = std::result::Result<T, InitError>;
 
 /// Prompts the user to select mod loaders
 pub fn pick_mod_loader() -> Result<Vec<ModLoader>> {
@@ -111,6 +141,6 @@ pub async fn create(
                 executable,
             ))
         }
-        _ => bail!("Provide both game versions and mod loaders to create a profile"),
+        _ => Err(InitError::MissingFields),
     }
 }

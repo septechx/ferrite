@@ -1,5 +1,5 @@
 use super::download::{clean, download};
-use anyhow::{Result, anyhow, bail};
+use super::error::{Result, UpgradeError};
 use colored::Colorize as _;
 use indicatif::{ProgressBar, ProgressStyle};
 use libium::{
@@ -30,7 +30,7 @@ pub async fn get_platform_downloadables(
 ) -> Result<(Vec<DownloadData>, bool)> {
     let style = ProgressStyle::default_bar()
         .template("{spinner} {elapsed} [{wide_bar:.cyan/blue}] {pos:.cyan}/{len:.blue}")
-        .expect("Progress bar template parse failure")
+        .unwrap_or_else(|_| ProgressStyle::default_bar())
         .progress_chars("#>-");
     let progress_bar = Arc::new(Mutex::new(ProgressBar::new(0).with_style(style)));
     let mut tasks = JoinSet::new();
@@ -120,7 +120,7 @@ pub async fn get_platform_downloadables(
                         {
                             // Immediately fail if the rate limit has been exceeded
                             progress_bar.lock().finish_and_clear();
-                            bail!(err);
+                            return Err(UpgradeError::Download(err.to_string()));
                         }
                         progress_bar.lock().println(format!(
                             "{}",
@@ -134,7 +134,7 @@ pub async fn get_platform_downloadables(
     }
 
     Arc::try_unwrap(progress_bar)
-        .map_err(|_| anyhow!("Failed to run threads to completion"))?
+        .map_err(|_| UpgradeError::ThreadJoin)?
         .into_inner()
         .finish_and_clear();
 
@@ -180,7 +180,7 @@ pub async fn upgrade(
     let disabled_slugs = profile
         .disabled
         .iter()
-        .map(|m| m.slug.clone().unwrap())
+        .filter_map(|m| m.slug.clone())
         .collect::<Vec<_>>();
 
     for entry in read_dir(&profile.output_dir)? {

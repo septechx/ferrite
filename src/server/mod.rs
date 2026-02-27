@@ -1,11 +1,12 @@
 mod download;
+mod error;
 mod installers;
 mod structs;
 
 pub use download::*;
+pub use error::{Result, ServerError};
 pub use installers::*;
 
-use anyhow::Result;
 use indicatif::ProgressBar;
 use libium::config::structs::ModLoader;
 
@@ -34,7 +35,7 @@ pub async fn get_server_jar(
 fn create_progress_bar(message: &str) -> ProgressBar {
     let style = indicatif::ProgressStyle::default_spinner()
         .template("{spinner} {msg}")
-        .expect("Progress bar template parse failure");
+        .unwrap_or_else(|_| indicatif::ProgressStyle::default_spinner());
     let progress_bar = ProgressBar::new_spinner().with_style(style);
     progress_bar.set_message(message.to_string());
     progress_bar.enable_steady_tick(std::time::Duration::from_millis(100));

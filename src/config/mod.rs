@@ -1,10 +1,11 @@
+mod error;
 mod types;
 mod upgrade;
 
+pub use error::{ConfigError, Result};
 pub use types::{FerriteConfig, KeyStoreConfig};
 pub use upgrade::{detect_config_version, needs_upgrade, upgrade_config};
 
-use anyhow::{Result, anyhow};
 use colored::Colorize;
 use dotenvy::dotenv;
 use std::{env, fs, io::Write, process::Command};
@@ -37,8 +38,8 @@ pub fn load_config() -> Result<FerriteConfig> {
         println!("{} Config upgraded to version {}.", "✓".green(), version);
     }
 
-    let config: FerriteConfig = serde_norway::from_str(&config_content)
-        .map_err(|e| anyhow!("Failed to parse config: {}", e))?;
+    let config: FerriteConfig =
+        serde_norway::from_str(&config_content).map_err(|e| ConfigError::Parse(e.to_string()))?;
 
     match config.key_store {
         KeyStoreConfig::DotEnv => {
@@ -55,7 +56,7 @@ pub fn load_config() -> Result<FerriteConfig> {
             let gh_token = Command::new("pass")
                 .arg("ferrite/github_token")
                 .output()
-                .expect("failed to run pass")
+                .map_err(|e| ConfigError::PassCommand(format!("github_token: {}", e)))?
                 .stdout;
 
             let token_str = String::from_utf8_lossy(&gh_token).trim().to_string();
@@ -66,7 +67,7 @@ pub fn load_config() -> Result<FerriteConfig> {
             let cf_api_key = Command::new("pass")
                 .arg("ferrite/curseforge_api_key")
                 .output()
-                .expect("failed to run pass")
+                .map_err(|e| ConfigError::PassCommand(format!("curseforge_api_key: {}", e)))?
                 .stdout;
 
             let key_str = String::from_utf8_lossy(&cf_api_key).trim().to_string();

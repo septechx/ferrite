@@ -1,10 +1,9 @@
-use anyhow::{Result, anyhow};
+use super::error::{Result, ServerError};
+use super::{ServerInstallation, download_file_with_progress, structs::*};
 use colored::Colorize;
 use indicatif::ProgressBar;
 use libium::iter_ext::IterExt;
 use std::{collections::HashMap, fs, process::Command};
-
-use super::{ServerInstallation, download_file_with_progress, structs::*};
 
 pub trait Installer {
     async fn install(game_version: &str, progress_bar: &ProgressBar) -> Result<ServerInstallation>;
@@ -227,7 +226,7 @@ impl Installer for VelocityInstaller {
 
         let download_url = client
             .get(url)
-            .header(reqwest::header::USER_AGENT, user_agent)
+            .header(reqwest::header::USER_AGENT, &user_agent)
             .send()
             .await?
             .json::<Vec<VelocityVersionBuild>>()
@@ -236,10 +235,7 @@ impl Installer for VelocityInstaller {
         let download_url = download_url
             .first()
             .ok_or_else(|| {
-                anyhow!(
-                    "No Velocity proxy download URL found for {}",
-                    velocity_version
-                )
+                ServerError::VersionNotFound(format!("Velocity proxy for {}", velocity_version))
             })?
             .downloads
             .server_default
@@ -276,7 +272,9 @@ async fn fetch_fabric_loader_version(game_version: &str) -> Result<String> {
     versions
         .first()
         .map(|l| l.loader.version.clone())
-        .ok_or_else(|| anyhow!("No Fabric loader version found for {}", game_version))
+        .ok_or_else(|| {
+            ServerError::LoaderVersionNotFound("Fabric".to_string(), game_version.to_string())
+        })
 }
 
 async fn fetch_forge_loader_version(game_version: &str) -> Result<String> {
@@ -287,14 +285,13 @@ async fn fetch_forge_loader_version(game_version: &str) -> Result<String> {
     .json::<HashMap<String, Vec<String>>>()
     .await?;
 
-    let versions = versions
-        .get(game_version)
-        .ok_or_else(|| anyhow!("No Forge loader version found for {}", game_version))?;
+    let versions = versions.get(game_version).ok_or_else(|| {
+        ServerError::LoaderVersionNotFound("Forge".to_string(), game_version.to_string())
+    })?;
 
-    versions
-        .last()
-        .cloned()
-        .ok_or_else(|| anyhow!("No Forge loader version found for {}", game_version))
+    versions.last().cloned().ok_or_else(|| {
+        ServerError::LoaderVersionNotFound("Forge".to_string(), game_version.to_string())
+    })
 }
 
 async fn fetch_neoforge_loader_version(game_version: &str) -> Result<String> {
@@ -307,17 +304,23 @@ async fn fetch_neoforge_loader_version(game_version: &str) -> Result<String> {
 
     let versions: NeoForgeLoaderMetadata = serde_xml_rs::from_str(&versions)?;
 
+    let game_version_short = game_version
+        .strip_prefix("1.")
+        .ok_or(ServerError::InvalidVersionFormat)?;
+
     let versions = versions
         .versioning
         .versions
         .version
         .iter()
-        .filter(|v| v.starts_with(game_version.strip_prefix("1.").unwrap()))
+        .filter(|v| v.starts_with(game_version_short))
         .collect_vec();
 
     versions
         .last()
-        .ok_or_else(|| anyhow!("No NeoForge loader version found for {}", game_version))
+        .ok_or_else(|| {
+            ServerError::LoaderVersionNotFound("NeoForge".to_string(), game_version.to_string())
+        })
         .cloned()
         .cloned()
 }
@@ -336,7 +339,7 @@ pub async fn fetch_velocity_proxy_version(user_agent: &str) -> Result<String> {
     let latest_version = latest_version
         .versions
         .first()
-        .ok_or_else(|| anyhow!("No Velocity version found"))?
+        .ok_or_else(|| ServerError::VersionNotFound("Velocity".to_string()))?
         .version
         .id
         .to_owned();

@@ -6,20 +6,71 @@ mod scripts;
 mod server;
 mod upgrade;
 
-use mods::display_successes_failures;
-use anyhow::Result;
+use std::process::ExitCode;
+
 use clap::Parser;
 use cli::{Ferrite, SubCommands};
 use colored::Colorize;
 use config::load_config;
 use mods::disable;
+use mods::display_successes_failures;
 
 use libium::{config::structs::ModIdentifier, iter_ext::IterExt};
 use mods::remove;
 use upgrade::upgrade;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> ExitCode {
+    #[tokio::main]
+    async fn run_async() -> Result<(), FerriteError> {
+        run().await
+    }
+
+    match run_async() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("{} {}", "Error:".red(), e);
+            ExitCode::FAILURE
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum FerriteError {
+    #[error("Configuration error: {0}")]
+    Config(#[from] config::ConfigError),
+
+    #[error("Mod error: {0}")]
+    Mod(#[from] mods::ModError),
+
+    #[error("Server error: {0}")]
+    Server(#[from] server::ServerError),
+
+    #[error("Upgrade error: {0}")]
+    Upgrade(#[from] upgrade::UpgradeError),
+
+    #[error("Initialization error: {0}")]
+    Init(#[from] init::InitError),
+
+    #[error("Script error: {0}")]
+    Script(#[from] scripts::ScriptError),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("HTTP error: {0}")]
+    Http(#[from] reqwest::Error),
+
+    #[error("Parse error: {0}")]
+    Parse(#[from] std::num::ParseIntError),
+
+    #[error("Libium error: {0}")]
+    Libium(#[from] libium::add::Error),
+
+    #[error("Invalid identifier format: '{0}'. Expected 'owner/repo' for GitHub")]
+    InvalidIdentifierFormat(String),
+}
+
+async fn run() -> Result<(), FerriteError> {
     let cli = Ferrite::parse();
 
     match cli.subcommand {
@@ -130,7 +181,9 @@ async fn main() -> Result<()> {
             let mut config = load_config()?;
 
             let parsed_identifier: ModIdentifier = if identifier.contains('/') {
-                let split = identifier.split_once('/').unwrap();
+                let split = identifier
+                    .split_once('/')
+                    .ok_or_else(|| FerriteError::InvalidIdentifierFormat(identifier.clone()))?;
                 ModIdentifier::GitHubRepository((split.0.to_string(), split.1.to_string()), None)
             } else if identifier.chars().all(|c| c.is_ascii_digit()) {
                 ModIdentifier::CurseForgeProject(identifier.parse::<i32>()?, None)

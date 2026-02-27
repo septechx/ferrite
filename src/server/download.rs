@@ -1,4 +1,4 @@
-use anyhow::Result;
+use super::error::{Result, ServerError};
 use reqwest::header::CONTENT_DISPOSITION;
 use std::fs::File;
 use std::io::Write;
@@ -17,7 +17,7 @@ pub async fn download_file(url: &str) -> Result<String> {
         content_disposition
             .split(';')
             .find_map(|part| part.trim().strip_prefix("filename="))
-            .ok_or_else(|| anyhow::anyhow!("No filename in Content-Disposition"))?
+            .ok_or(ServerError::MissingFilename)?
             .trim_matches('"')
             .to_string()
     } else {

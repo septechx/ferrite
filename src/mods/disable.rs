@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use super::error::{ModError, Result};
 use colored::Colorize as _;
 use inquire::MultiSelect;
 use libium::{
@@ -55,7 +55,7 @@ pub fn disable(profile: &mut Profile, to_disable: Vec<String>) -> Result<()> {
             }) {
                 items_to_disable.push(index);
             } else {
-                bail!("A mod with ID or name {to_disable} is not present in this profile");
+                return Err(ModError::NotFound(to_disable));
             }
         }
         items_to_disable

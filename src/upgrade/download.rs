@@ -1,4 +1,4 @@
-use anyhow::{Error, Result, anyhow, bail};
+use super::error::{Result, UpgradeError};
 use colored::Colorize as _;
 use fs_extra::{
     dir::{CopyOptions as DirCopyOptions, copy as copy_dir},
@@ -88,7 +88,7 @@ pub async fn download(
         .template(
             "{spinner} {bytes_per_sec} [{wide_bar:.cyan/blue}] {bytes:.cyan}/{total_bytes:.blue}",
         )
-        .expect("Progress bar template parse failure")
+        .unwrap_or_else(|_| ProgressStyle::default_bar())
         .progress_chars("#>-");
 
     let progress_bar = Arc::new(Mutex::new(
@@ -116,7 +116,8 @@ pub async fn download(
                 .download(client, &output_dir, |additional| {
                     progress_bar.lock().inc(additional as u64);
                 })
-                .await?;
+                .await
+                .map_err(|e| UpgradeError::Download(e.to_string()))?;
             progress_bar.lock().println(format!(
                 "{} Downloaded  {:>7}  {}",
                 "✓".green(),
@@ -126,14 +127,14 @@ pub async fn download(
                     .to_string(),
                 filename.dimmed(),
             ));
-            Ok::<(), Error>(())
+            Ok::<(), UpgradeError>(())
         });
     }
     for res in tasks.join_all().await {
         res?;
     }
     Arc::try_unwrap(progress_bar)
-        .map_err(|_| anyhow!("Failed to run threads to completion"))?
+        .map_err(|_| UpgradeError::ThreadJoin)?
         .into_inner()
         .finish_and_clear();
     for (name, path) in to_install {
@@ -144,7 +145,7 @@ pub async fn download(
             copy_options.overwrite = true;
             copy_dir(path, &output_dir, &copy_options)?;
         } else {
-            bail!("Could not determine whether installable is a file or folder")
+            return Err(UpgradeError::InvalidInstallable);
         }
         println!(
             "{} Installed          {}",

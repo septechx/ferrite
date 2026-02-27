@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use super::error::{ModError, Result};
 use colored::Colorize as _;
 use inquire::MultiSelect;
 use libium::{
@@ -54,7 +54,7 @@ pub fn remove(profile: &mut Profile, to_remove: Vec<String>) -> Result<()> {
             }) {
                 items_to_remove.push(index);
             } else {
-                bail!("A mod with ID or name {to_remove} is not present in this profile");
+                return Err(ModError::NotFound(to_remove));
             }
         }
         items_to_remove
